@@ -3,9 +3,11 @@ package com.cargotracker.service;
 import com.cargotracker.dto.request.Requests;
 import com.cargotracker.dto.response.Responses;
 import com.cargotracker.entity.AppUser;
+import com.cargotracker.entity.EmailVerificationToken;
 import com.cargotracker.entity.PasswordResetToken;
 import com.cargotracker.exception.Exceptions;
 import com.cargotracker.repository.AppUserRepository;
+import com.cargotracker.repository.EmailVerificationTokenRepository;
 import com.cargotracker.repository.PasswordResetTokenRepository;
 
 import io.jsonwebtoken.Claims;
@@ -63,6 +65,9 @@ public class AuthService {
 
     @Inject
     private PasswordResetTokenRepository resetTokenRepository;
+
+    @Inject
+    private EmailVerificationTokenRepository verificationTokenRepository;
 
     @Inject
     private MailService mailService;
@@ -143,6 +148,11 @@ public class AuthService {
         );
 
         userRepository.save(user);
+
+        // Issue and mail a single-use verification token. Until the user
+        // clicks it, login will reject this account (see login() below).
+        issueAndSendVerificationToken(user);
+
         return Responses.User.from(user);
     }
 
@@ -157,8 +167,22 @@ public class AuthService {
             throw Exceptions.unauthorized("Account is deactivated — contact an administrator");
         }
 
+        // Password check FIRST, then the email-verified flag.
+        // Order is deliberate and matters for security: if we returned
+        // "please verify your email" before checking the password, an
+        // attacker could distinguish "account exists but unverified" from
+        // "no such account" by sending any password — turning login into
+        // an account-enumeration oracle. By verifying the password first,
+        // a wrong password gets the same generic 401 regardless of
+        // verification state. Only a caller who already knows the correct
+        // password sees the verification-needed message.
         if (!verifyPassword(request.getPassword(), user.getPasswordHash())) {
             throw Exceptions.unauthorized("Invalid credentials");
+        }
+
+        if (!user.isEmailVerified()) {
+            throw Exceptions.forbidden(
+                    "Email not verified — check your inbox for the confirmation link");
         }
 
         user.setLastLoginAt(LocalDateTime.now());
@@ -166,6 +190,73 @@ public class AuthService {
         String token = generateToken(user.getUsername());
 
         return new Responses.Auth(token, user.getUsername(), user.getRole().name(), SESSION_SECONDS);
+    }
+
+    // ── Email verification ────────────────────────────────────────────────────
+
+    /**
+     * Consume a verification token: flip the user's {@code emailVerified}
+     * flag and delete every outstanding token for that user (one-shot).
+     *
+     * Returns the (now verified) username so the resource layer can render
+     * a friendly confirmation page.
+     */
+    @Transactional
+    public String verifyEmail(@NotBlank String rawToken) {
+        EmailVerificationToken evt = verificationTokenRepository
+                .findByToken(rawToken)
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired verification link"));
+
+        // Single generic message regardless of WHY (unknown / used / expired)
+        // so an attacker can't probe to learn which tokens were issued.
+        if (evt.isUsed() || evt.isExpired()) {
+            throw Exceptions.badRequest("Invalid or expired verification link");
+        }
+
+        AppUser user = userRepository.findById(evt.getUser().getId())
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired verification link"));
+
+        user.setEmailVerified(true);
+        userRepository.update(user);
+        verificationTokenRepository.deleteAllForUser(user.getId());
+
+        LOG.info(() -> "Email verified for user id=" + user.getId());
+        return user.getUsername();
+    }
+
+    /**
+     * Re-issue a verification email if the address corresponds to an
+     * unverified account. Always succeeds silently from the caller's
+     * perspective — we never confirm whether an address is registered or
+     * its verification state.
+     */
+    @Transactional
+    public void resendVerification(@NotNull @Valid Requests.ResendVerification request) {
+        userRepository.findByEmail(request.getEmail().trim().toLowerCase())
+                .ifPresent(user -> {
+                    if (!user.isActive() || user.isEmailVerified()) {
+                        return;     // nothing to do; never reveal which case
+                    }
+                    issueAndSendVerificationToken(user);
+                });
+    }
+
+    /**
+     * Internal helper used by {@code register} and {@code resendVerification}.
+     * Deletes any prior outstanding tokens for the user before issuing a new
+     * one — there should never be more than one valid verify link in flight.
+     */
+    private void issueAndSendVerificationToken(AppUser user) {
+        verificationTokenRepository.deleteAllForUser(user.getId());
+
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        String rawToken = Base64.getUrlEncoder().withoutPadding()
+                                .encodeToString(randomBytes);
+
+        verificationTokenRepository.save(new EmailVerificationToken(rawToken, user));
+
+        mailService.sendVerificationEmail(user.getEmail(), user.getFullName(), rawToken);
     }
 
     // ── Forgot password ───────────────────────────────────────────────────────

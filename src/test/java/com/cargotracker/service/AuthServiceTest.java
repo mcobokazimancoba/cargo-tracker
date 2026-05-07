@@ -3,8 +3,10 @@ package com.cargotracker.service;
 import com.cargotracker.dto.request.Requests;
 import com.cargotracker.dto.response.Responses;
 import com.cargotracker.entity.AppUser;
+import com.cargotracker.entity.EmailVerificationToken;
 import com.cargotracker.exception.AppException;
 import com.cargotracker.repository.AppUserRepository;
+import com.cargotracker.repository.EmailVerificationTokenRepository;
 import com.cargotracker.repository.PasswordResetTokenRepository;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,6 +51,7 @@ class AuthServiceTest {
 
     @Mock private AppUserRepository userRepository;
     @Mock private PasswordResetTokenRepository resetTokenRepository;
+    @Mock private EmailVerificationTokenRepository verificationTokenRepository;
     @Mock private MailService mailService;
 
     @InjectMocks
@@ -66,7 +71,7 @@ class AuthServiceTest {
     // ── register ──────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("register: persists a CUSTOMER with hashed password and lowercased email")
+    @DisplayName("register: persists a CUSTOMER with hashed password, lowercased email, and triggers verification mail")
     void register_success() {
         Requests.Register req = new Requests.Register();
         req.setUsername("alice");
@@ -90,7 +95,14 @@ class AuthServiceTest {
              && !u.getPasswordHash().equals("supersecretpw")    // i.e. hashing happened
              && u.getPasswordHash().contains(":")               // PBKDF2 format: salt:key
              && u.getRole() == AppUser.Role.CUSTOMER
+             && !u.isEmailVerified()                            // step 9: starts unverified
         ));
+
+        // Step 9: a verification email must be sent as part of registration.
+        verify(verificationTokenRepository).save(any(EmailVerificationToken.class));
+        verify(mailService).sendVerificationEmail(eq("alice@example.com"),
+                                                  eq("Alice Andersson"),
+                                                  anyString());
     }
 
     @Test
@@ -122,6 +134,7 @@ class AuthServiceTest {
                 authService.hashPassword("supersecretpw"),
                 "Alice",
                 AppUser.Role.CUSTOMER);
+        user.setEmailVerified(true);            // step 9: login requires this
 
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
@@ -154,6 +167,7 @@ class AuthServiceTest {
                 authService.hashPassword("supersecretpw"),
                 "Alice",
                 AppUser.Role.CUSTOMER);
+        user.setEmailVerified(true);
 
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
 
@@ -168,6 +182,58 @@ class AuthServiceTest {
         assertEquals("Invalid credentials", ex.getMessage());
     }
 
+    // ── step 9: email verification ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("login: 403 with verify-email message when password is correct but email not verified")
+    void login_unverifiedEmail_blocked() {
+        AppUser user = new AppUser(
+                "alice",
+                "alice@example.com",
+                authService.hashPassword("supersecretpw"),
+                "Alice",
+                AppUser.Role.CUSTOMER);
+        // emailVerified left at the default (false)
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        Requests.Login req = new Requests.Login();
+        req.setUsername("alice");
+        req.setPassword("supersecretpw");
+
+        AppException ex = assertThrows(AppException.class, () -> authService.login(req));
+        assertEquals(403, ex.getHttpStatusCode());
+        assertEquals("Email not verified — check your inbox for the confirmation link",
+                ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("login: unverified user with WRONG password gets the same generic 401, not the verify-email leak")
+    void login_unverifiedEmail_wrongPassword_keepsGenericError() {
+        // Threat model: if we returned "please verify" before checking the
+        // password, an attacker could submit any password and learn that the
+        // account exists in an unverified state — turning login into an
+        // enumeration oracle. Password check MUST come first.
+        AppUser user = new AppUser(
+                "alice",
+                "alice@example.com",
+                authService.hashPassword("supersecretpw"),
+                "Alice",
+                AppUser.Role.CUSTOMER);
+        // emailVerified left at the default (false)
+
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+
+        Requests.Login req = new Requests.Login();
+        req.setUsername("alice");
+        req.setPassword("WRONG-password");
+
+        AppException ex = assertThrows(AppException.class, () -> authService.login(req));
+        assertEquals(401, ex.getHttpStatusCode(),
+                "wrong-password failure must not leak the unverified-account state");
+        assertEquals("Invalid credentials", ex.getMessage());
+    }
+
     // ── token forgery defence ─────────────────────────────────────────────────
 
     @Test
@@ -178,6 +244,7 @@ class AuthServiceTest {
                 "alice", "a@b.com",
                 authService.hashPassword("pw-twelve-characters"),
                 "Alice", AppUser.Role.CUSTOMER);
+        user.setEmailVerified(true);
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         Requests.Login req = new Requests.Login();
         req.setUsername("alice");

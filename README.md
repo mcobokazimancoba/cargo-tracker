@@ -157,12 +157,14 @@ Base path: `/api`
 
 ### Authentication
 
-| Method | Path                          | Auth | Notes                                |
-| ------ | ----------------------------- | ---- | ------------------------------------ |
-| POST   | `/api/auth/register`          | —    | Self-service register as `CUSTOMER`  |
-| POST   | `/api/auth/login`             | —    | Returns a signed JWT (HS256)         |
-| POST   | `/api/auth/forgot-password`   | —    | Always 200 (no account enumeration)  |
-| POST   | `/api/auth/reset-password`    | —    | Single-use token, 15-minute TTL      |
+| Method | Path                                | Auth | Notes                                                            |
+| ------ | ----------------------------------- | ---- | ---------------------------------------------------------------- |
+| POST   | `/api/auth/register`                | —    | Self-service register as `CUSTOMER`; sends a verification email  |
+| GET    | `/api/auth/verify?token=…`          | —    | Confirms ownership of the email; returns a small HTML page       |
+| POST   | `/api/auth/resend-verification`     | —    | Always 200 (no enumeration); re-issues if account is unverified  |
+| POST   | `/api/auth/login`                   | —    | Returns a signed JWT (HS256); 403 if email not yet verified      |
+| POST   | `/api/auth/forgot-password`         | —    | Always 200 (no account enumeration)                              |
+| POST   | `/api/auth/reset-password`          | —    | Single-use token, 15-minute TTL                                  |
 
 ### Cargo
 
@@ -356,12 +358,53 @@ Stricter, scoped only to `/api/auth/login`:
 
 - `forgot-password` always returns 200 whether or not the email is
   registered.
-- `reset-password` returns the same generic message for every failure
-  cause (token unknown / used / expired) — no signal of which.
+- `resend-verification` always returns 200 whether the email is
+  registered, already verified, or unknown.
+- `reset-password` and `verify` both return the same generic message
+  for every failure cause (token unknown / used / expired) — no signal
+  of which.
 - The login throttle replies in constant time when locked, so an
   attacker can't probe for valid usernames by timing.
-- Reset tokens are **never logged** in plaintext (they're bearer
-  credentials — anyone holding the token can change the password).
+- **Login order of operations** — see [Email verification](#email-verification)
+  below; password is verified *before* the email-verified flag, so a
+  wrong password gets the same generic 401 whether the account is
+  verified or not.
+- Reset and verification tokens are **never logged** in plaintext
+  (they're bearer credentials — anyone holding the token can change
+  the password / confirm the address).
+
+### Email verification
+
+New accounts are blocked from logging in until they click the link
+mailed at registration. Three endpoints make up the flow:
+
+```
+POST /api/auth/register                ← creates AppUser(email_verified=false)
+                                         + issues + mails a single-use token (24 h TTL)
+GET  /api/auth/verify?token=…          ← flips email_verified=true; renders an HTML page
+POST /api/auth/resend-verification     ← {email}; always 200, re-issues if applicable
+```
+
+**Why the password is verified before the verification flag is checked
+in `login`.** The interview-defensible sequence is:
+
+1. Lookup user by username — generic 401 if not found.
+2. Verify password — generic 401 on mismatch.
+3. Check `email_verified` — 403 with the verify-email message if false.
+4. Issue JWT.
+
+If we checked the flag before the password, an attacker could submit
+*any* password and learn that the username exists in an unverified
+state. That turns login into an account-enumeration oracle. By
+verifying the password first, only a caller who already knows the
+correct password ever sees the verification-needed message — at which
+point the existence of the account isn't a secret to them.
+
+**The verify-email page is plain HTML.** Users land there by clicking
+a link in their inbox, so JSON would be hostile UX. The page is
+self-contained (no SPA dependency) so the link still works if the
+frontend is unreachable, and the username — the only piece of
+user-supplied data rendered — is HTML-escaped.
 
 ### Secrets handling
 
@@ -411,13 +454,13 @@ mvn test
 ```
 
 A small, focused JUnit 5 + Mockito suite under `src/test/java/`. Three
-test classes, 15 methods total — deliberately not exhaustive (full
+test classes, 17 methods total — deliberately not exhaustive (full
 coverage was out of scope for this branch). They exercise the security-
 critical paths added in this branch:
 
 | Test class                         | What it proves                                             |
 | ---------------------------------- | ---------------------------------------------------------- |
-| `AuthServiceTest`                  | Registration normalises and hashes; login round-trips a JWT; wrong password / forged signature → 401 |
+| `AuthServiceTest`                  | Registration normalises, hashes, and triggers verification mail; login round-trips a JWT; wrong password / forged signature → 401; unverified email → 403 only after correct password (no enumeration) |
 | `LoginThrottleServiceTest`         | Brute-force lockout fires at exactly N failures, isolates per (IP, user), survives case-rotation, clears on success, ages out |
 | `CargoServiceAuthorizationTest`    | Per-customer ownership rule on the protected tracking lookup (guest / OPERATOR / ADMIN / owner-CUSTOMER all allowed; non-owner CUSTOMER → 403) |
 

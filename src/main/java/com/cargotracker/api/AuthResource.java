@@ -10,9 +10,11 @@ import jakarta.inject.Inject;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -117,5 +119,90 @@ public class AuthResource {
         return Response.ok(
             Map.of("message", "Password updated successfully. Please log in.")
         ).build();
+    }
+
+    /**
+     * GET /api/auth/verify?token=...
+     *
+     * Consumes the email-verification token mailed at registration. Returns
+     * a small HTML page (not JSON) because users land here by clicking a
+     * link in their inbox — they expect a human-readable result, not raw
+     * JSON. The page contains no app-specific styling on purpose: keeping
+     * it self-contained means the link works even if the SPA is unreachable
+     * at the time of click.
+     */
+    @GET
+    @Path("verify")
+    @Produces(MediaType.TEXT_HTML)
+    public Response verifyEmail(@QueryParam("token") String token) {
+        if (token == null || token.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(htmlPage("Verification failed",
+                            "The verification link is missing its token. " +
+                            "Try clicking the link in your email again."))
+                    .build();
+        }
+        try {
+            String username = authService.verifyEmail(token);
+            return Response.ok(htmlPage("Email verified",
+                    "Welcome, " + escape(username) + ". You can now log in."))
+                    .build();
+        } catch (RuntimeException e) {
+            // verifyEmail throws a generic AppException for any failure cause
+            // (unknown / used / expired) — pass that message straight through
+            // since it has already been sanitised to be enumeration-safe.
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(htmlPage("Verification failed", escape(e.getMessage())))
+                    .build();
+        }
+    }
+
+    /**
+     * POST /api/auth/resend-verification
+     * Always returns 200 — never confirms whether the address is registered
+     * or whether it's still unverified. Same enumeration-defence pattern as
+     * forgot-password.
+     */
+    @POST
+    @Path("resend-verification")
+    public Response resendVerification(@Valid Requests.ResendVerification request) {
+        authService.resendVerification(request);
+        return Response.ok(Map.of(
+                "message",
+                "If that address belongs to an unverified account, "
+              + "a new verification link has been sent."
+        )).build();
+    }
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    /** Tiny self-contained HTML page used by the email-verify endpoint. */
+    private static String htmlPage(String heading, String body) {
+        return """
+            <!doctype html>
+            <html lang="en">
+            <head><meta charset="utf-8"><title>%s — Cargo Tracker</title></head>
+            <body style="font-family: sans-serif; max-width: 480px; margin: 4rem auto;
+                         padding: 2rem; border: 1px solid #ddd; border-radius: 8px;">
+              <h1 style="font-size: 1.4rem; margin: 0 0 0.5rem;">%s</h1>
+              <p style="color: #444;">%s</p>
+              <p><a href="/Cargo_Tracker_System/index.html">Return to Cargo Tracker</a></p>
+            </body>
+            </html>
+            """.formatted(heading, heading, body);
+    }
+
+    /**
+     * Minimal HTML escaping for the ONE place we render user input on the
+     * verify page (the username after success). Five chars cover every XSS
+     * vector that matters for an attribute-free, script-free template.
+     */
+    private static String escape(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }   // ← closing brace — everything is inside the class

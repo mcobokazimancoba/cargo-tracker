@@ -10,6 +10,7 @@
         <class>com.cargotracker.entity.TrackingEvent</class>
         <class>com.cargotracker.entity.AppUser</class>
         <class>com.cargotracker.entity.PasswordResetToken</class>
+        <class>com.cargotracker.entity.EmailVerificationToken</class>
 
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
         <properties>

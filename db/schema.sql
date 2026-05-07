@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS app_users (
     full_name       VARCHAR(100) NOT NULL,
     role            VARCHAR(20)  NOT NULL,
     active          BOOLEAN      NOT NULL DEFAULT TRUE,
+    -- Step 9: blocks login until the user clicks the verify link.
+    -- Default FALSE so new accounts must verify; existing rows on
+    -- pre-step-9 databases need a one-off backfill, see end of file.
+    email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP    NOT NULL,
     last_login_at   TIMESTAMP,
 
@@ -130,6 +134,22 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_prt_token ON password_reset_tokens (token);
 
 
+-- ── Email verification tokens ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id          BIGSERIAL    PRIMARY KEY,
+    token       VARCHAR(64)  NOT NULL,
+    user_id     BIGINT       NOT NULL,
+    created_at  TIMESTAMP    NOT NULL,
+    used        BOOLEAN      NOT NULL DEFAULT FALSE,
+
+    CONSTRAINT fk_evt_user
+        FOREIGN KEY (user_id) REFERENCES app_users (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_evt_token ON email_verification_tokens (token);
+
+
 -- =============================================================================
 -- Seed data — minimum needed for the app to start usefully.
 -- The locations and one ADMIN user are the only system data; everything
@@ -149,3 +169,21 @@ ON CONFLICT (unlocode) DO NOTHING;
 -- a one-off SQL update:
 --
 --   UPDATE app_users SET role = 'ADMIN' WHERE username = 'your-admin';
+--
+-- Note for upgrading from a pre-step-9 database:
+-- The ALTER below adds the email_verified column with DEFAULT FALSE, which
+-- means every existing account is locked out of login (because login now
+-- requires email_verified = TRUE). Decide one of:
+--
+--   a) Backfill — trust existing accounts, mark them all verified:
+--        UPDATE app_users SET email_verified = TRUE;
+--
+--   b) Force re-verification — leave them FALSE, send each existing user
+--      a fresh verification link via POST /api/auth/resend-verification.
+--
+-- For a brand-new database (running this whole file from scratch), the
+-- column is created by the CREATE TABLE above and no ALTER is needed.
+
+-- ALTER TABLE app_users
+--     ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+-- UPDATE app_users SET email_verified = TRUE;   -- only if you choose option (a)

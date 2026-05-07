@@ -51,4 +51,17 @@ public final class Requests {
         public String getNewPassword()           { return newPassword; }
         public void   setNewPassword(String pw)  { this.newPassword = pw; }
     }
+
+    // ── POST /api/auth/resend-verification ────────────────────────────────
+    public static class ResendVerification {
+
+        @NotBlank
+        @Email
+        private String email;
+
+        public ResendVerification() {}
+
+        public String getEmail()             { return email; }
+        public void   setEmail(String email) { this.email = email; }
+    }
 }
