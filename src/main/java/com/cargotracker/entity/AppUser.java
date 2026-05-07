@@ -27,10 +27,16 @@ import java.time.LocalDateTime;
  * which maps to the DB keyword in some dialects.
  *
  * <p>Password storage:
- * This entity stores only a BCrypt hash. The raw password never touches the
- * entity. Hashing happens in the service layer before the entity is constructed.
- * This is the correct professional pattern — entities must never hold plaintext
- * credentials even transiently.
+ * This entity stores only a salted PBKDF2-HMAC-SHA256 hash (310,000 iterations,
+ * 16-byte salt, 256-bit key) — see {@link com.cargotracker.service.AuthService}.
+ * The raw password never touches the entity; hashing happens in the service
+ * layer before the entity is constructed. Entities must never hold plaintext
+ * credentials, even transiently.
+ *
+ * <p>PBKDF2 was chosen over BCrypt because it ships with the JDK
+ * ({@code javax.crypto.SecretKeyFactory}) — no third-party dependency — and
+ * the iteration count meets the current OWASP Password Storage recommendation
+ * for PBKDF2-HMAC-SHA256.
  */
 @Entity
 @Table(

@@ -45,20 +45,29 @@ public class AuthService {
     @Transactional
     public Responses.User register(@NotNull @Valid Requests.Register request) {
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw Exceptions.duplicate("User", "username", request.getUsername());
+        // Normalise BEFORE the duplicate check.
+        // Why: the entity is persisted with a lowercased email, but if we check
+        // `existsByEmail` against the raw input then "Foo@bar.com" and
+        // "foo@bar.com" would both pass the uniqueness check and create two
+        // accounts that collide on the unique index at insert time
+        // (or worse, get inserted on different DBs that fold case differently).
+        String normalisedEmail = request.getEmail().trim().toLowerCase();
+        String normalisedUsername = request.getUsername().trim();
+
+        if (userRepository.existsByUsername(normalisedUsername)) {
+            throw Exceptions.duplicate("User", "username", normalisedUsername);
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw Exceptions.duplicate("User", "email", request.getEmail());
+        if (userRepository.existsByEmail(normalisedEmail)) {
+            throw Exceptions.duplicate("User", "email", normalisedEmail);
         }
 
         String passwordHash = hashPassword(request.getPassword());
 
         AppUser user = new AppUser(
-                request.getUsername(),
-                request.getEmail().toLowerCase(),
+                normalisedUsername,
+                normalisedEmail,
                 passwordHash,
-                request.getFullName(),
+                request.getFullName().trim(),
                 AppUser.Role.CUSTOMER
         );
 
