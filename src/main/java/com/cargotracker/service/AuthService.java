@@ -8,6 +8,13 @@ import com.cargotracker.exception.Exceptions;
 import com.cargotracker.repository.AppUserRepository;
 import com.cargotracker.repository.PasswordResetTokenRepository;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -15,14 +22,20 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import javax.crypto.SecretKey;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Date;
+import java.util.logging.Logger;
 
 @ApplicationScoped
 public class AuthService {
+
+    private static final Logger LOG = Logger.getLogger(AuthService.class.getName());
 
     public static final long SESSION_SECONDS = 8L * 60 * 60;
 
@@ -31,7 +44,19 @@ public class AuthService {
     private static final int    KEY_BITS   = 256;
     private static final String ALGORITHM  = "PBKDF2WithHmacSHA256";
     private static final String HASH_SEP   = ":";
-    private static final String TOKEN_SEP  = ".";
+
+    /**
+     * HS256 requires a key of at least 256 bits = 32 bytes. JJWT will throw
+     * WeakKeyException if we feed it a shorter one, but checking ourselves at
+     * startup turns "first login fails in production" into "deploy fails fast".
+     */
+    private static final int    JWT_MIN_KEY_BYTES = 32;
+    private static final String JWT_ISSUER        = "cargo-tracker";
+    private static final String JWT_SECRET_PROP   = "jwt.secret";
+    private static final String JWT_SECRET_ENV    = "JWT_SECRET";
+
+    /** HMAC key derived from the configured secret. Resolved once at bean init. */
+    private SecretKey jwtKey;
 
     @Inject
     private AppUserRepository userRepository;
@@ -41,6 +66,52 @@ public class AuthService {
 
     @Inject
     private MailService mailService;
+
+    /**
+     * Resolves the JWT signing secret once, at bean construction.
+     *
+     * Resolution order:
+     *   1. -Djwt.secret=...   (GlassFish JVM option)
+     *   2. JWT_SECRET=...     (process environment)
+     *   3. randomly generated 32-byte key for THIS JVM (dev fallback only)
+     *
+     * Why a random dev fallback rather than a hard-coded default?
+     * A hard-coded default would ship with every clone of this repo and be
+     * the same on every developer's machine — anyone could forge a token
+     * for any deployment that forgot to set the env var. A random per-JVM
+     * key means the worst case in dev is "tokens stop working after a
+     * GlassFish restart", which is a noisy, obvious failure mode rather
+     * than a silent vulnerability. We log a stern WARNING so it cannot be
+     * missed.
+     */
+    @PostConstruct
+    void initJwtKey() {
+        String configured = System.getProperty(JWT_SECRET_PROP);
+        if (configured == null || configured.isBlank()) {
+            configured = System.getenv(JWT_SECRET_ENV);
+        }
+
+        if (configured != null && !configured.isBlank()) {
+            byte[] bytes = configured.getBytes(StandardCharsets.UTF_8);
+            if (bytes.length < JWT_MIN_KEY_BYTES) {
+                throw new IllegalStateException(
+                    "JWT secret too short: HS256 requires >= " + JWT_MIN_KEY_BYTES
+                    + " bytes (got " + bytes.length + "). "
+                    + "Set " + JWT_SECRET_ENV + " to a long random string.");
+            }
+            this.jwtKey = Keys.hmacShaKeyFor(bytes);
+            LOG.info("JWT signing key loaded from configuration.");
+        } else {
+            byte[] random = new byte[JWT_MIN_KEY_BYTES];
+            new SecureRandom().nextBytes(random);
+            this.jwtKey = Keys.hmacShaKeyFor(random);
+            LOG.warning("==========================================================");
+            LOG.warning(" JWT_SECRET is not set. Using a random per-JVM dev key.");
+            LOG.warning(" Tokens issued by this instance will be invalidated on");
+            LOG.warning(" every GlassFish restart. DO NOT run like this in prod.");
+            LOG.warning("==========================================================");
+        }
+    }
 
     @Transactional
     public Responses.User register(@NotNull @Valid Requests.Register request) {
@@ -165,49 +236,62 @@ public class AuthService {
 
     // ── Token generation ──────────────────────────────────────────────────────
 
+    /**
+     * Issues a signed JWT for a successfully authenticated user.
+     *
+     * Algorithm:    HS256 (HMAC-SHA-256, symmetric)
+     * Payload:      sub=<username>, iss=cargo-tracker, iat, exp
+     * Lifetime:     {@link #SESSION_SECONDS}
+     *
+     * The username goes in the standard `sub` claim rather than a custom one
+     * so any standard JWT inspector (jwt.io, libraries) shows it correctly.
+     * Roles are NOT embedded — we look up the live AppUser on every request
+     * in AuthFilter, so a role change takes effect on the next request without
+     * waiting for the token to expire.
+     */
     private String generateToken(String username) {
-        byte[] randomBytes = new byte[32];
-        new SecureRandom().nextBytes(randomBytes);
-
-        long issuedAt = System.currentTimeMillis() / 1000L;
-
-        String payload = username
-                + TOKEN_SEP + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes)
-                + TOKEN_SEP + issuedAt;
-
-        return Base64.getUrlEncoder().withoutPadding()
-                     .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        long nowMillis = System.currentTimeMillis();
+        return Jwts.builder()
+                .issuer(JWT_ISSUER)
+                .subject(username)
+                .issuedAt(new Date(nowMillis))
+                .expiration(new Date(nowMillis + SESSION_SECONDS * 1000L))
+                .signWith(jwtKey, Jwts.SIG.HS256)
+                .compact();
     }
 
     // ── Token validation ──────────────────────────────────────────────────────
 
+    /**
+     * Verifies the JWT signature and returns the {@code sub} (username) claim.
+     * Throws an unauthorized exception with a non-leaky message on any failure
+     * (bad signature, malformed token, wrong issuer, expired, etc.).
+     *
+     * Why narrow the message? An attacker probing the auth endpoint should
+     * learn only "your token is bad", not which specific check rejected it.
+     * The detailed cause is logged at FINE level for debugging.
+     */
     public String validateToken(@NotBlank String token) {
         try {
-            String payload = new String(
-                    Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
+            Claims claims = Jwts.parser()
+                    .requireIssuer(JWT_ISSUER)
+                    .verifyWith(jwtKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
 
-            int lastDot = payload.lastIndexOf(TOKEN_SEP);
-            if (lastDot < 0) throw Exceptions.unauthorized("Malformed token");
-
-            int secondLastDot = payload.lastIndexOf(TOKEN_SEP, lastDot - 1);
-            if (secondLastDot < 0) throw Exceptions.unauthorized("Malformed token");
-
-            String username    = payload.substring(0, secondLastDot);
-            String issuedAtStr = payload.substring(lastDot + 1);
-
-            if (username.isBlank()) throw Exceptions.unauthorized("Malformed token");
-
-            long issuedAt   = Long.parseLong(issuedAtStr);
-            long nowSeconds = System.currentTimeMillis() / 1000L;
-
-            if (nowSeconds - issuedAt > SESSION_SECONDS) {
-                throw Exceptions.unauthorized("Token has expired — please log in again");
+            String username = claims.getSubject();
+            if (username == null || username.isBlank()) {
+                throw Exceptions.unauthorized("Invalid token");
             }
-
             return username;
 
-        } catch (IllegalArgumentException e) {
-            throw Exceptions.unauthorized("Invalid token format");
+        } catch (ExpiredJwtException e) {
+            // Distinct message because clients legitimately need to know to re-login.
+            throw Exceptions.unauthorized("Token has expired — please log in again");
+        } catch (JwtException | IllegalArgumentException e) {
+            LOG.fine(() -> "JWT rejected: " + e.getClass().getSimpleName() + " — " + e.getMessage());
+            throw Exceptions.unauthorized("Invalid token");
         }
     }
 
