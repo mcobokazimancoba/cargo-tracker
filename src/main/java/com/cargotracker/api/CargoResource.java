@@ -9,6 +9,10 @@ import com.cargotracker.service.CargoService;
 
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
@@ -61,11 +65,14 @@ public class CargoResource {
     // @Path("/{trackingNumber}") method below, otherwise JAX-RS will try to
     // match the literal string "customer" as a tracking-number path param.
 
+    // Bounds on page/size are enforced both here AND in the service. Belt and
+    // braces: the resource rejects nonsense before we hit the DB; the service
+    // is independently safe if any future caller skips the resource layer.
     @GET
     @Path("/customer/mine")
     public Response getMyCargos(
-            @QueryParam("page") @DefaultValue("0") int page,
-            @QueryParam("size") @DefaultValue("100") int size,
+            @QueryParam("page") @DefaultValue("0")  @Min(0) int page,
+            @QueryParam("size") @DefaultValue("100") @Min(1) @Max(100) int size,
             @Context ContainerRequestContext ctx) {
 
         AppUser caller = getUser(ctx);
@@ -82,9 +89,9 @@ public class CargoResource {
 
     @GET
     public Response getAll(
-            @QueryParam("page")   @DefaultValue("0")  int page,
-            @QueryParam("size")   @DefaultValue("20") int size,
-            @QueryParam("status") String statusParam,
+            @QueryParam("page")   @DefaultValue("0")  @Min(0)            int page,
+            @QueryParam("size")   @DefaultValue("20") @Min(1) @Max(100)  int size,
+            @QueryParam("status") @Size(max = 30)                        String statusParam,
             @Context ContainerRequestContext ctx) {
 
         AppUser caller = getUser(ctx);
@@ -112,9 +119,16 @@ public class CargoResource {
 
     // ── GET /cargos/{trackingNumber} — shipment tracking with optional auth ─
 
+    // @Pattern on every {trackingNumber} path param: rejects garbage path
+    // segments at the framework boundary, before they reach the repository.
+    // Without it, "GET /api/cargos/<script>" would 404 from the DB lookup
+    // instead of 400 at the validator.
     @GET
     @Path("/{trackingNumber}")
-    public Response track(@PathParam("trackingNumber") String trackingNumber,
+    public Response track(@PathParam("trackingNumber")
+                          @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN,
+                                   message = "Invalid tracking number format")
+                          String trackingNumber,
                           @Context ContainerRequestContext ctx) {
 
         // Three caller types are valid here:
@@ -134,7 +148,10 @@ public class CargoResource {
 
     @PUT
     @Path("/{trackingNumber}")
-    public Response update(@PathParam("trackingNumber") String trackingNumber,
+    public Response update(@PathParam("trackingNumber")
+                           @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN,
+                                    message = "Invalid tracking number format")
+                           String trackingNumber,
                            @Valid Requests.CargoUpdate request,
                            @Context ContainerRequestContext ctx) {
 
@@ -153,7 +170,10 @@ public class CargoResource {
 
     @POST
     @Path("/{trackingNumber}/events")
-    public Response addEvent(@PathParam("trackingNumber") String trackingNumber,
+    public Response addEvent(@PathParam("trackingNumber")
+                             @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN,
+                                      message = "Invalid tracking number format")
+                             String trackingNumber,
                              @Valid Requests.TrackingEvent request,
                              @Context ContainerRequestContext ctx) {
 
@@ -172,7 +192,10 @@ public class CargoResource {
 
     @DELETE
     @Path("/{trackingNumber}")
-    public Response cancel(@PathParam("trackingNumber") String trackingNumber,
+    public Response cancel(@PathParam("trackingNumber")
+                           @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN,
+                                    message = "Invalid tracking number format")
+                           String trackingNumber,
                            @Context ContainerRequestContext ctx) {
 
         AppUser caller = getUser(ctx);
@@ -190,7 +213,10 @@ public class CargoResource {
 
     @DELETE
     @Path("/{trackingNumber}/permanent")
-    public Response deletePermanent(@PathParam("trackingNumber") String trackingNumber,
+    public Response deletePermanent(@PathParam("trackingNumber")
+                                    @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN,
+                                             message = "Invalid tracking number format")
+                                    String trackingNumber,
                                     @Context ContainerRequestContext ctx) {
 
         AppUser caller = getUser(ctx);

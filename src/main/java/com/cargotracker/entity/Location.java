@@ -41,6 +41,13 @@ import java.util.List;
 )
 public class Location {
 
+    /**
+     * UN/LOCODE format: 2-letter ISO country code followed by 3 alphanumeric
+     * location characters, all uppercase (e.g. "ZAJNB" for Johannesburg).
+     * Centralised here so every DTO and resource references one definition.
+     */
+    public static final String UNLOCODE_PATTERN = "[A-Z]{2}[A-Z0-9]{3}";
+
     /*
      * SEQUENCE strategy vs IDENTITY:
      *   IDENTITY  →  DB generates the ID after INSERT  →  Hibernate/EclipseLink

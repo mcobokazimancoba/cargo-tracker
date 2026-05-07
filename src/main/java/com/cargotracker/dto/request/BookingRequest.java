@@ -1,8 +1,12 @@
 package com.cargotracker.dto.request;
 
+import com.cargotracker.entity.Location;
+
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
@@ -10,20 +14,30 @@ import java.time.LocalDate;
 
 public class BookingRequest {
 
+    // @Pattern enforces the UN/LOCODE shape (2 country letters + 3 alphanum)
+    // on top of @Size, so "abcde" or "!!!!!" are rejected up front instead of
+    // hitting LocationRepository.findByUnlocode and returning a confusing 404.
     @NotBlank
-    @Size(min = 5, max = 5, message = "UN/LOCODE must be exactly 5 characters")
+    @Pattern(regexp = Location.UNLOCODE_PATTERN,
+             message = "UN/LOCODE must be 5 uppercase chars: 2 country letters + 3 alphanumeric")
     private String originUnlocode;
 
     @NotBlank
-    @Size(min = 5, max = 5, message = "UN/LOCODE must be exactly 5 characters")
+    @Pattern(regexp = Location.UNLOCODE_PATTERN,
+             message = "UN/LOCODE must be 5 uppercase chars: 2 country letters + 3 alphanumeric")
     private String destinationUnlocode;
 
     @NotBlank
     @Size(max = 500)
     private String description;
 
+    // Upper cap chosen because the largest single-piece air cargo on record is
+    // ~190 tonnes; 1,000,000 kg is comfortably above any legitimate booking
+    // and rejects an obvious DoS / overflow / fat-finger input without
+    // restricting real customers.
     @NotNull
     @Positive(message = "Weight must be greater than zero")
+    @DecimalMax(value = "1000000", message = "Weight cannot exceed 1,000,000 kg")
     private BigDecimal weightKg;
 
     @Future(message = "Expected arrival must be a future date")

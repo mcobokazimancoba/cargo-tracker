@@ -6,6 +6,8 @@ import jakarta.mail.*;
 import jakarta.mail.internet.*;
 
 import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Sends transactional emails via SMTP.
@@ -31,6 +33,8 @@ import java.util.Properties;
  */
 @ApplicationScoped
 public class MailService {
+
+    private static final Logger LOG = Logger.getLogger(MailService.class.getName());
 
     private String smtpHost;
     private int    smtpPort;
@@ -148,8 +152,11 @@ public class MailService {
             msg.setContent(htmlBody, "text/html; charset=utf-8");
             Transport.send(msg);
         } catch (Exception e) {
-            // Never propagate — must not reveal whether an address exists.
-            System.err.println("[MailService] Failed to send to " + toEmail + ": " + e.getMessage());
+            // Never propagate — the forgot-password flow MUST return 200 whether or
+            // not the email exists; surfacing a delivery failure to the caller would
+            // confirm the address is valid (account-enumeration leak). We log at
+            // WARNING for ops visibility but the HTTP response stays uniform.
+            LOG.log(Level.WARNING, e, () -> "Failed to send mail to " + toEmail);
         }
     }
 
