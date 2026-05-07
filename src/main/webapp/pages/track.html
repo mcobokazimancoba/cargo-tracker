@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Shipment — Cargo Tracker</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #route-map { height: 400px; border-radius: var(--radius-lg); margin: 20px 0; z-index: 1; background: var(--bg-raised); }
+        .map-legend { display: flex; gap: 15px; margin-top: 10px; font-size: 0.7rem; }
+        .map-legend-item { display: flex; align-items: center; gap: 5px; }
+        .map-legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .map-legend-dot.origin { background: #22c55e; }
+        .map-legend-dot.dest   { background: #ef4444; }
+        .map-line { width: 30px; height: 2px; background: #f59e0b; }
+
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin: 20px 0; }
+        .meta-cell { background: var(--bg-surface); padding: 13px 16px; }
+        .meta-key  { font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
+        .meta-val  { font-size: 0.88rem; color: var(--text-primary); }
+
+        .timeline { position: relative; padding-left: 28px; }
+        .timeline::before { content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
+        .timeline-item { position: relative; margin-bottom: 22px; }
+        .timeline-item::before { content: ''; position: absolute; left: -24px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--bg-raised); border: 1px solid var(--border-strong); }
+        .timeline-item.latest::before { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 4px var(--amber-glow); }
+        .timeline-event { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
+        .timeline-meta  { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+        .timeline-note  { font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px; font-style: italic; }
+
+        .alert-error   { background: rgba(239,68,68,0.15);  border: 1px solid #ef4444; color: #fca5a5; padding: 10px; border-radius: 4px; margin-bottom: 16px; }
+        .loading-row   { text-align: center; padding: 40px; color: var(--text-muted); }
+        .spinner       { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--amber); border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .badge         { display: inline-flex; align-items: center; gap: 5px; font-size: 0.62rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 2px; }
+        .badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+        .badge-delivered      { color: #22c55e; background: rgba(34,197,94,0.1); }
+        .badge-in_transit     { color: #f59e0b; background: rgba(245,158,11,0.12); }
+        .badge-booked         { color: #60a5fa; background: rgba(96,165,250,0.12); }
+        .badge-at_destination { color: #a78bfa; background: rgba(167,139,250,0.12); }
+        .badge-cancelled      { color: #6b7280; background: rgba(255,255,255,0.05); }
+
+        .guest-banner { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.25); color: #f59e0b; padding: 10px 16px; border-radius: 4px; font-size: 0.75rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+        .guest-banner a { color: #f59e0b; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-logo"><div class="nav-logo-hex"></div>CargoTrack</div>
+    <div class="nav-links">
+        <a class="nav-link" data-page="dashboard" href="/Cargo_Tracker_System/pages/dashboard.html">Dashboard</a>
+        <a class="nav-link" data-page="book"      href="/Cargo_Tracker_System/pages/book.html">Book Shipment</a>
+        <a class="nav-link" data-page="track"     href="/Cargo_Tracker_System/pages/track.html">Track</a>
+        <a class="nav-link" data-page="search"    href="/Cargo_Tracker_System/pages/search.html">All Cargo</a>
+        <a class="nav-link" data-page="update"    href="/Cargo_Tracker_System/pages/update-cargo.html">Update</a>
+    </div>
+    <div class="nav-actions">
+        <span id="nav-user" class="nav-user-badge" style="display:none"></span>
+        <button id="btn-logout" class="btn btn-ghost btn-sm" style="display:none">Sign Out</button>
+    </div>
+</nav>
+
+<div class="hero" style="background:var(--bg-surface); border-bottom:1px solid var(--border); padding:36px 24px;">
+    <div class="hero-inner" style="max-width:680px; margin:0 auto;">
+        <div class="hero-title" style="font-size:1.5rem; font-weight:700; text-transform:uppercase; margin-bottom:4px;">Track Your Shipment</div>
+        <div class="search-row" style="display:flex; gap:10px; margin-top:20px;">
+            <input id="input-tn" class="form-control" type="text" placeholder="CGO-1001" style="flex:1; text-transform:uppercase;">
+            <button id="trackBtn" class="btn btn-primary btn-lg">Track</button>
+        </div>
+        <div id="search-alert" style="margin-top:10px;"></div>
+    </div>
+</div>
+
+<main class="page" style="max-width:1000px; margin:0 auto">
+    <div id="guest-notice" style="display:none; margin-top:20px;">
+        <div class="guest-banner">
+            ℹ️ You are tracking as a guest. &nbsp;<a href="/Cargo_Tracker_System/">Sign in</a> for full access to book and manage shipments.
+        </div>
+    </div>
+
+    <div id="result" style="display:none;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:20px; flex-wrap:wrap;">
+            <div>
+                <div class="cargo-tn" style="font-size:1.8rem; font-weight:700; color:var(--amber);" id="res-tn"></div>
+                <div style="font-size:0.82rem; color:var(--text-secondary); margin-top:5px" id="res-desc"></div>
+            </div>
+            <div id="res-status"></div>
+        </div>
+
+        <div id="route-map"></div>
+        <div class="map-legend">
+            <div class="map-legend-item"><div class="map-legend-dot origin"></div><span>Origin</span></div>
+            <div class="map-legend-item"><div class="map-legend-dot dest"></div><span>Destination</span></div>
+            <div class="map-legend-item"><div class="map-line"></div><span>Route</span></div>
+        </div>
+
+        <div class="meta-grid" id="meta-grid"></div>
+
+        <div class="card">
+            <div class="card-title">Tracking History</div>
+            <div id="timeline-box"></div>
+        </div>
+    </div>
+</main>
+
+<script type="module">
+    import { Auth, CargoApi, initNav } from '../js/api.js';
+
+    // ── Allow guests — do NOT call Auth.requireAuth() ────────────────────────
+    const isLoggedIn = Auth.isLoggedIn();
+
+    if (isLoggedIn) {
+        initNav('track');
+        document.getElementById('btn-logout').style.display = '';
+    } else {
+        // Guest: hide nav links that require a login
+        document.querySelectorAll('.nav-link[data-page="dashboard"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.nav-link[data-page="book"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.nav-link[data-page="search"]').forEach(el => el.style.display = 'none');
+        document.querySelectorAll('.nav-link[data-page="update"]').forEach(el => el.style.display = 'none');
+        document.getElementById('btn-logout').style.display = 'none';
+        document.getElementById('guest-notice').style.display = '';
+    }
+
+    // ── Port coordinate lookup ───────────────────────────────────────────────
+    const COORDS = {
+        'USNYC': { lat: 40.7128,  lng: -74.0060,  name: 'New York'      },
+        'NLRTM': { lat: 51.9244,  lng:   4.4777,  name: 'Rotterdam'     },
+        'CNSHA': { lat: 31.2304,  lng: 121.4737,  name: 'Shanghai'      },
+        'SGSIN': { lat:  1.3521,  lng: 103.8198,  name: 'Singapore'     },
+        'AEDXB': { lat: 25.2048,  lng:  55.2708,  name: 'Dubai'         },
+        'USLAX': { lat: 34.0522,  lng:-118.2437,  name: 'Los Angeles'   },
+        'DEHAM': { lat: 53.5511,  lng:   9.9937,  name: 'Hamburg'       },
+        'JPTYO': { lat: 35.6762,  lng: 139.6503,  name: 'Tokyo'         },
+        'ZADUR': { lat:-29.8587,  lng:  31.0218,  name: 'Durban'        },
+        'ZACPT': { lat:-33.9249,  lng:  18.4241,  name: 'Cape Town'     },
+        'ZAJNB': { lat:-26.2041,  lng:  28.0473,  name: 'Johannesburg'  }
+    };
+
+    let currentMap = null;
+
+    // ── Map ──────────────────────────────────────────────────────────────────
+    function renderMap(originCode, destCode) {
+        const o = COORDS[originCode];
+        const d = COORDS[destCode];
+
+        if (!o || !d) {
+            document.getElementById('route-map').innerHTML =
+                '<div style="padding:20px;text-align:center;color:var(--text-muted)">Map not available for this route</div>';
+            return;
+        }
+
+        if (currentMap) { currentMap.remove(); currentMap = null; }
+
+        currentMap = L.map('route-map').setView(
+            [(o.lat + d.lat) / 2, (o.lng + d.lng) / 2], 3
+        );
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(currentMap);
+
+        L.marker([o.lat, o.lng]).addTo(currentMap)
+         .bindPopup(`<b>Origin</b><br>${o.name} (${originCode})`);
+        L.marker([d.lat, d.lng]).addTo(currentMap)
+         .bindPopup(`<b>Destination</b><br>${d.name} (${destCode})`);
+        L.polyline([[o.lat, o.lng], [d.lat, d.lng]], { color: '#f59e0b', weight: 3 })
+         .addTo(currentMap);
+
+        currentMap.fitBounds([[o.lat, o.lng], [d.lat, d.lng]], { padding: [40, 40] });
+    }
+
+    // ── Track ────────────────────────────────────────────────────────────────
+    async function trackShipment() {
+        const tn = document.getElementById('input-tn').value.trim().toUpperCase();
+        if (!tn) {
+            document.getElementById('search-alert').innerHTML =
+                '<div class="alert-error">Please enter a tracking number</div>';
+            return;
+        }
+
+        const btn = document.getElementById('trackBtn');
+        btn.disabled    = true;
+        btn.textContent = 'Loading…';
+        document.getElementById('search-alert').innerHTML  = '';
+        document.getElementById('result').style.display    = 'none';
+
+        try {
+            // KEY FIX: Use trackGuest() — works for both guests and logged-in users,
+            // but never triggers a redirect on 401/403. This is what was sending
+            // users back to the login page when they clicked Track.
+            const cargo = await CargoApi.trackGuest(tn);
+            if (cargo) displayShipment(cargo);
+        } catch (err) {
+            document.getElementById('search-alert').innerHTML =
+                `<div class="alert-error">❌ Shipment not found: ${tn}</div>`;
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Track';
+        }
+    }
+
+    // ── Render result ────────────────────────────────────────────────────────
+    function displayShipment(c) {
+        document.getElementById('result').style.display = '';
+        document.getElementById('res-tn').textContent   = c.trackingNumber;
+        document.getElementById('res-desc').textContent = c.description || '—';
+
+        const statusClass = (c.status || '').toLowerCase();
+        document.getElementById('res-status').innerHTML =
+            `<span class="badge badge-${statusClass}">${c.status}</span>`;
+
+        document.getElementById('meta-grid').innerHTML = `
+            <div class="meta-cell"><div class="meta-key">Origin</div>
+                <div class="meta-val">${c.origin?.city || '—'} (${c.origin?.unlocode || '—'})</div></div>
+            <div class="meta-cell"><div class="meta-key">Destination</div>
+                <div class="meta-val">${c.destination?.city || '—'} (${c.destination?.unlocode || '—'})</div></div>
+            <div class="meta-cell"><div class="meta-key">Weight</div>
+                <div class="meta-val">${c.weightKg != null ? c.weightKg + ' kg' : '—'}</div></div>
+            <div class="meta-cell"><div class="meta-key">Expected Arrival</div>
+                <div class="meta-val">${c.expectedArrival || 'Not set'}</div></div>
+            <div class="meta-cell"><div class="meta-key">Booked On</div>
+                <div class="meta-val">${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}</div></div>
+        `;
+
+        renderMap(c.origin?.unlocode, c.destination?.unlocode);
+
+        const evs = c.trackingEvents || [];
+        if (!evs.length) {
+            document.getElementById('timeline-box').innerHTML =
+                '<div class="empty-state" style="padding:20px"><div class="empty-state-title">No events recorded yet</div></div>';
+        } else {
+            const sorted = [...evs].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+            document.getElementById('timeline-box').innerHTML =
+                `<div class="timeline">${sorted.map((ev, i) => `
+                    <div class="timeline-item ${i === 0 ? 'latest' : ''}">
+                        <div class="timeline-event">${(ev.eventType || '').replace(/_/g, ' ')}</div>
+                        <div class="timeline-meta">
+                            ${ev.location?.city || ev.location?.unlocode || '—'}
+                            &mdash; ${new Date(ev.occurredAt).toLocaleString()}
+                        </div>
+                        ${ev.notes ? `<div class="timeline-note">${ev.notes}</div>` : ''}
+                    </div>`).join('')}
+                </div>`;
+        }
+    }
+
+    // ── Event wiring ─────────────────────────────────────────────────────────
+    document.getElementById('trackBtn').addEventListener('click', trackShipment);
+    document.getElementById('input-tn').addEventListener('keypress', e => {
+        if (e.key === 'Enter') trackShipment();
+    });
+
+    // Auto-track if ?tn= is in the URL
+    const urlTn = new URLSearchParams(location.search).get('tn');
+    if (urlTn) {
+        document.getElementById('input-tn').value = urlTn;
+        trackShipment();
+    }
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</body>
+</html>

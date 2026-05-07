@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"C:/Users/Mancoba/Desktop/CargoTracker/com.cargotracker_cargo-tracker_war_1.0.0-SNAPSHOT\" init -b main)",
+      "Bash(git -C \"C:/Users/Mancoba/Desktop/CargoTracker/com.cargotracker_cargo-tracker_war_1.0.0-SNAPSHOT\" add .)",
+      "Bash(git -C \"C:/Users/Mancoba/Desktop/CargoTracker/com.cargotracker_cargo-tracker_war_1.0.0-SNAPSHOT\" status --short)"
+    ]
+  }
+}

@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CargoTrack — Logistics Operations Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --gold:        #E8A000;
+            --gold-bright: #FFB800;
+            --gold-glow:   rgba(232,160,0,0.18);
+            --gold-soft:   rgba(232,160,0,0.07);
+            --gold-line:   rgba(232,160,0,0.3);
+            --void:        #03060F;
+            --deep:        #070B18;
+            --panel:       #0B1022;
+            --raised:      #101628;
+            --card:        #141B30;
+            --border:      rgba(255,255,255,0.06);
+            --border-hi:   rgba(255,255,255,0.11);
+            --border-gold: rgba(232,160,0,0.22);
+            --text-1:      #EDF0FF;
+            --text-2:      #8090B8;
+            --text-3:      #3A4566;
+            --green:       #00D46A;
+            --red:         #FF4757;
+            --font-display:'Bebas Neue', sans-serif;
+            --font-mono:   'JetBrains Mono', monospace;
+            --font-body:   'Outfit', sans-serif;
+            --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+        }
+
+        html, body { font-family: var(--font-body); background: var(--void); color: var(--text-1); }
+
+        .shell { display: grid; grid-template-rows: 1fr auto; min-height: 100vh; }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand-mark { width: 28px; height: 28px; position: relative; flex-shrink: 0; }
+        .brand-mark svg { width: 100%; height: 100%; }
+        .brand-name { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.12em; color: var(--text-1); }
+        .brand-name span { color: var(--gold); }
+        .status-pill { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-green 2.5s ease-in-out infinite; }
+        @keyframes pulse-green { 0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); } 50% { opacity: 0.5; box-shadow: 0 0 3px var(--green); } }
+
+        .main { display: grid; grid-template-columns: 1fr 420px; }
+
+        /* HERO */
+        .hero-panel { background: var(--deep); position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 48px 64px; }
+        .world-grid { position: absolute; inset: 0; opacity: 0.4; }
+        .world-grid svg { width: 100%; height: 100%; }
+        .hero-panel::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 80% at 35% 50%, transparent 20%, rgba(3,6,15,0.5) 60%, rgba(3,6,15,0.9) 100%); z-index: 1; pointer-events: none; }
+        .hero-panel::after { content: ''; position: absolute; bottom: -120px; left: -80px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, rgba(232,160,0,0.1) 0%, transparent 65%); z-index: 1; pointer-events: none; }
+        .hero-content { position: relative; z-index: 2; max-width: 560px; }
+        .hero-eyebrow { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; animation: fade-up 0.6s var(--ease-out) 0.1s both; }
+        .eyebrow-bar { width: 32px; height: 1px; background: linear-gradient(90deg, var(--gold), transparent); }
+        .hero-heading { font-family: var(--font-display); font-size: clamp(3.2rem, 5vw, 5.5rem); line-height: 0.93; letter-spacing: 0.02em; color: var(--text-1); margin-bottom: 24px; animation: fade-up 0.6s var(--ease-out) 0.2s both; }
+        .hero-heading .accent { color: var(--gold); }
+        .hero-sub { font-size: 0.9rem; font-weight: 300; line-height: 1.8; color: var(--text-2); max-width: 440px; margin-bottom: 40px; animation: fade-up 0.6s var(--ease-out) 0.3s both; }
+        .stat-strip { display: flex; gap: 0; margin-bottom: 40px; border: 1px solid var(--border-hi); border-radius: 8px; overflow: hidden; animation: fade-up 0.6s var(--ease-out) 0.4s both; }
+        .stat-item { flex: 1; padding: 14px 18px; background: var(--raised); border-right: 1px solid var(--border); transition: background 0.2s; }
+        .stat-item:last-child { border-right: none; }
+        .stat-item:hover { background: var(--card); }
+        .stat-num { font-family: var(--font-display); font-size: 1.8rem; color: var(--gold); line-height: 1; margin-bottom: 4px; }
+        .stat-lbl { font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
+        .feature-tags { display: flex; flex-wrap: wrap; gap: 8px; animation: fade-up 0.6s var(--ease-out) 0.5s both; }
+        .tag { display: flex; align-items: center; gap: 7px; background: var(--gold-soft); border: 1px solid var(--border-gold); border-radius: 4px; padding: 6px 13px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); transition: border-color 0.2s, color 0.2s, background 0.2s; }
+        .tag:hover { border-color: var(--gold); color: var(--gold); background: rgba(232,160,0,0.1); }
+        .tag-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
+        .access-levels { margin-top: 36px; animation: fade-up 0.6s var(--ease-out) 0.6s both; }
+        .access-label { font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-3); margin-bottom: 12px; }
+        .access-cards { display: flex; gap: 10px; }
+        .access-card { flex: 1; padding: 12px 14px; border-radius: 6px; border: 1px solid; transition: transform 0.2s; }
+        .access-card:hover { transform: translateY(-2px); }
+        .access-card.admin { background: rgba(255,71,87,0.07); border-color: rgba(255,71,87,0.2); }
+        .access-card.operator { background: rgba(232,160,0,0.07); border-color: rgba(232,160,0,0.2); }
+        .access-card.customer { background: rgba(0,212,106,0.07); border-color: rgba(0,212,106,0.2); }
+        .access-role { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+        .access-card.admin    .access-role { color: #FF6B7A; }
+        .access-card.operator .access-role { color: var(--gold); }
+        .access-card.customer .access-role { color: var(--green); }
+        .access-desc { font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.06em; color: var(--text-3); line-height: 1.5; }
+
+        /* FORM PANEL */
+        .form-panel { background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; padding: 44px 40px 36px; overflow-y: auto; position: relative; min-height: 100vh; }
+        .form-panel::before { content: ''; position: absolute; top: 0; right: 0; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, var(--gold)); }
+        .form-panel::after  { content: ''; position: absolute; top: 0; right: 0; width: 3px; height: 100px; background: linear-gradient(180deg, var(--gold), transparent); }
+        .form-header { margin-bottom: 28px; }
+        .form-kicker { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .form-kicker::before { content: ''; display: inline-block; width: 16px; height: 1px; background: var(--gold); }
+        .form-title { font-family: var(--font-display); font-size: 2.2rem; letter-spacing: 0.04em; color: var(--text-1); line-height: 1; margin-bottom: 4px; }
+        .form-subtitle { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+
+        .tabs { display: flex; background: var(--deep); border: 1px solid var(--border-hi); border-radius: 6px; padding: 3px; gap: 3px; margin-bottom: 28px; }
+        .tab { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); padding: 9px 0; border-radius: 4px; cursor: pointer; transition: background 0.2s, color 0.2s; user-select: none; }
+        .tab:hover { color: var(--text-2); }
+        .tab.active { background: var(--card); color: var(--gold); box-shadow: inset 0 1px 0 var(--border-gold); }
+
+        #alert-box { min-height: 0; }
+        .alert { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 6px; margin-bottom: 18px; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; line-height: 1.5; animation: alert-in 0.3s var(--ease-out) both; }
+        @keyframes alert-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+        .alert-error   { background: rgba(255,71,87,0.08);  border: 1px solid rgba(255,71,87,0.25);  color: #FF8F9A; }
+        .alert-success { background: rgba(0,212,106,0.08);  border: 1px solid rgba(0,212,106,0.25);  color: #4DFFA0; }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .form-group  { margin-bottom: 16px; }
+        .form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-label  { display: block; font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); margin-bottom: 7px; transition: color 0.2s; }
+        .form-group:focus-within .form-label { color: var(--gold); }
+        .form-control { width: 100%; background: var(--deep); border: 1px solid var(--border-hi); border-radius: 6px; color: var(--text-1); padding: 11px 14px; font-size: 0.875rem; font-family: var(--font-body); outline: none; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s; caret-color: var(--gold); }
+        .form-control::placeholder { color: var(--text-3); }
+        .form-control:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow); background: rgba(3,6,15,0.8); }
+        .form-control.input-error { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(255,71,87,0.15) !important; }
+        .form-hint { font-family: var(--font-mono); font-size: 0.54rem; color: var(--text-3); margin-top: 5px; letter-spacing: 0.06em; }
+        .form-hint.hint-error { color: #FF6B7A; }
+        .form-hint.hint-ok    { color: var(--green); }
+
+        .btn-submit { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 13px 20px; margin-top: 10px; background: var(--gold); color: #050810; border: none; border-radius: 6px; font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.12em; cursor: pointer; position: relative; overflow: hidden; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
+        .btn-submit::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%); pointer-events: none; }
+        .btn-submit:hover { background: var(--gold-bright); box-shadow: 0 6px 24px rgba(232,160,0,0.35); transform: translateY(-1px); }
+        .btn-submit:active { transform: none; box-shadow: none; }
+        .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-arrow { font-size: 1.1rem; transition: transform 0.2s; }
+        .btn-submit:hover .btn-arrow { transform: translateX(4px); }
+
+        .forgot-link {
+            display: block; text-align: center; font-family: var(--font-mono); font-size: 0.58rem;
+            letter-spacing: 0.1em; color: var(--text-3); margin-top: 12px; cursor: pointer;
+            transition: color 0.2s; background: none; border: none; width: 100%; padding: 4px 0;
+        }
+        .forgot-link:hover { color: var(--gold); }
+
+        .back-link {
+            display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
+            font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3);
+            cursor: pointer; background: none; border: none; padding: 0; margin-bottom: 20px; transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--gold); }
+        .back-link::before { content: '←'; font-size: 0.8rem; }
+
+        .guest-track { margin-top: 20px; text-align: center; padding: 14px; background: var(--deep); border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em; color: var(--text-3); transition: border-color 0.2s; }
+        .guest-track:hover { border-color: var(--border-hi); }
+        .guest-track a { color: var(--gold); text-decoration: none; font-weight: 500; transition: opacity 0.2s; }
+        .guest-track a:hover { opacity: 0.75; }
+
+        .form-footer { margin-top: auto; padding-top: 28px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em; color: var(--text-3); }
+        .footer-status { display: flex; align-items: center; gap: 6px; }
+        .footer-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+        /* BOTTOM BAR */
+        .bottombar { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 48px; background: var(--deep); border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); flex-shrink: 0; }
+        .bottombar-center { display: flex; gap: 24px; }
+        .bottombar-center span { color: var(--text-3); }
+        .bottombar-center span + span::before { content: '·'; margin-right: 24px; color: var(--text-3); }
+
+        /* ANIMATIONS */
+        @keyframes fade-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes draw-line { from { stroke-dashoffset: 600; } to { stroke-dashoffset: 0; } }
+        .route-path { stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw-line 3s var(--ease-out) 0.8s forwards; }
+        .grid-line { animation: grid-pulse 4s ease-in-out infinite; }
+        @keyframes grid-pulse { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.35; } }
+
+        @media (max-width: 900px) {
+            html, body { overflow: auto; }
+            .shell { height: auto; }
+            .main { grid-template-columns: 1fr; }
+            .hero-panel { padding: 40px 28px; min-height: 420px; }
+            .form-panel { padding: 36px 24px; }
+            .bottombar { padding: 0 24px; }
+            .hero-heading { font-size: 3rem; }
+            .access-cards { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+  <div class="main">
+
+    <!-- LEFT: HERO -->
+    <div class="hero-panel">
+      <div class="world-grid">
+        <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+          <g stroke="rgba(232,160,0,0.12)" stroke-width="0.5" fill="none">
+            <line x1="0" y1="83"  x2="800" y2="83"  class="grid-line" style="animation-delay:0s"/>
+            <line x1="0" y1="166" x2="800" y2="166" class="grid-line" style="animation-delay:0.3s"/>
+            <line x1="0" y1="250" x2="800" y2="250" class="grid-line" style="animation-delay:0.6s"/>
+            <line x1="0" y1="333" x2="800" y2="333" class="grid-line" style="animation-delay:0.9s"/>
+            <line x1="0" y1="416" x2="800" y2="416" class="grid-line" style="animation-delay:1.2s"/>
+            <line x1="100" y1="0" x2="100" y2="500" class="grid-line" style="animation-delay:0.15s"/>
+            <line x1="200" y1="0" x2="200" y2="500" class="grid-line" style="animation-delay:0.45s"/>
+            <line x1="300" y1="0" x2="300" y2="500" class="grid-line" style="animation-delay:0.75s"/>
+            <line x1="400" y1="0" x2="400" y2="500" class="grid-line" style="animation-delay:1.05s"/>
+            <line x1="500" y1="0" x2="500" y2="500" class="grid-line" style="animation-delay:1.35s"/>
+            <line x1="600" y1="0" x2="600" y2="500" class="grid-line" style="animation-delay:0.2s"/>
+            <line x1="700" y1="0" x2="700" y2="500" class="grid-line" style="animation-delay:0.5s"/>
+          </g>
+          <g fill="rgba(232,160,0,0.06)" stroke="rgba(232,160,0,0.15)" stroke-width="0.8">
+            <path d="M 60 80 L 90 70 L 130 75 L 160 100 L 155 160 L 140 200 L 120 220 L 100 210 L 80 190 L 60 160 L 50 130 Z"/>
+            <path d="M 130 230 L 155 220 L 170 250 L 165 310 L 150 360 L 135 370 L 118 340 L 110 290 L 115 250 Z"/>
+            <path d="M 340 70 L 380 65 L 400 80 L 390 110 L 365 120 L 340 110 Z"/>
+            <path d="M 350 130 L 400 120 L 430 150 L 435 220 L 415 290 L 385 320 L 355 300 L 330 250 L 325 180 L 340 150 Z"/>
+            <path d="M 420 60 L 560 55 L 620 80 L 640 120 L 600 160 L 550 180 L 490 170 L 440 150 L 420 120 Z"/>
+            <path d="M 590 260 L 650 250 L 680 270 L 675 320 L 640 340 L 590 320 L 575 290 Z"/>
+          </g>
+          <g fill="#E8A000">
+            <circle cx="100" cy="200" r="3" opacity="0.6"/>
+            <circle cx="390" cy="100" r="3" opacity="0.6"/>
+            <circle cx="580" cy="140" r="3" opacity="0.6"/>
+            <circle cx="540" cy="230" r="3" opacity="0.6"/>
+            <circle cx="465" cy="155" r="3" opacity="0.6"/>
+            <circle cx="390" cy="290" r="3" opacity="0.6"/>
+            <circle cx="80"  cy="240" r="3" opacity="0.6"/>
+            <circle cx="435" cy="80"  r="3" opacity="0.6"/>
+          </g>
+          <path d="M 100 200 Q 240 120 390 100" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.5" class="route-path" stroke-linecap="round"/>
+          <path d="M 580 140 Q 570 185 540 230" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.4" stroke-dasharray="400" stroke-dashoffset="400" style="animation: draw-line 2.5s cubic-bezier(0.16,1,0.3,1) 1.4s forwards"/>
+          <path d="M 390 100 Q 430 130 465 155" fill="none" stroke="#E8A000" stroke-width="1" opacity="0.35" stroke-dasharray="300" stroke-dashoffset="300" style="animation: draw-line 2s cubic-bezier(0.16,1,0.3,1) 2s forwards"/>
+          <circle r="4" fill="#E8A000" opacity="0.9">
+            <animateMotion dur="5s" repeatCount="indefinite" begin="2s">
+              <mpath href="#route-nyc-rtm"/>
+            </animateMotion>
+          </circle>
+          <path id="route-nyc-rtm" d="M 100 200 Q 240 120 390 100" fill="none"/>
+          <circle cx="100" cy="200" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
+            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
+          </circle>
+          <circle cx="390" cy="100" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
+            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="1.5s"/>
+            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="1.5s"/>
+          </circle>
+          <circle cx="580" cy="140" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
+            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="2.5s"/>
+            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="2.5s"/>
+          </circle>
+        </svg>
+      </div>
+
+      <div class="hero-content">
+        <div class="hero-eyebrow"><div class="eyebrow-bar"></div>Global Freight Management System</div>
+        <h1 class="hero-heading">FULL<br>CARGO<br><span class="accent">CONTROL.</span></h1>
+        <p class="hero-sub">Real-time tracking, intelligent routing, and end-to-end cargo management — engineered for operators who can't afford to lose sight of a single shipment.</p>
+        <div class="stat-strip">
+          <div class="stat-item"><div class="stat-num">—</div><div class="stat-lbl">Active Ships</div></div>
+          <div class="stat-item"><div class="stat-num">—</div><div class="stat-lbl">Delivered</div></div>
+          <div class="stat-item"><div class="stat-num">99.9%</div><div class="stat-lbl">Uptime SLA</div></div>
+          <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-lbl">Operations</div></div>
+        </div>
+        <div class="feature-tags">
+          <div class="tag"><span class="tag-dot"></span>Real-time tracking</div>
+          <div class="tag"><span class="tag-dot"></span>Role-based access</div>
+          <div class="tag"><span class="tag-dot"></span>Event logging</div>
+          <div class="tag"><span class="tag-dot"></span>Analytics dashboard</div>
+          <div class="tag"><span class="tag-dot"></span>Multi-route support</div>
+        </div>
+        <div class="access-levels">
+          <div class="access-label">// Access Levels</div>
+          <div class="access-cards">
+            <div class="access-card admin"><div class="access-role">Admin</div><div class="access-desc">Full access<br>Cancel · Delete</div></div>
+            <div class="access-card operator"><div class="access-role">Operator</div><div class="access-desc">All cargo<br>Update · Events</div></div>
+            <div class="access-card customer"><div class="access-role">Customer</div><div class="access-desc">Own shipments<br>Book · Track</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: FORM PANEL -->
+    <div class="form-panel">
+
+      <div class="form-header">
+        <div class="form-kicker" id="form-kicker">Secure Portal</div>
+        <div class="form-title" id="form-title">SIGN IN</div>
+        <div class="form-subtitle" id="form-subtitle">Enter your credentials to continue</div>
+      </div>
+
+      <div id="alert-box"></div>
+
+      <div class="tabs" id="tabs-row">
+        <div class="tab active" data-tab="login">Sign In</div>
+        <div class="tab" data-tab="register">Register</div>
+      </div>
+
+      <!-- LOGIN -->
+      <div id="panel-login" class="panel active">
+        <form id="form-login" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="login-username">Username</label>
+            <input id="login-username" class="form-control" type="text"
+                   placeholder="e.g. admin" autocomplete="username" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="login-password">Password</label>
+            <input id="login-password" class="form-control" type="password"
+                   placeholder="Enter your password" autocomplete="current-password" required>
+          </div>
+          <button type="submit" class="btn-submit" id="btn-login">
+            Sign In <span class="btn-arrow">→</span>
+          </button>
+        </form>
+
+        <button class="forgot-link" id="btn-show-forgot">Forgot your password?</button>
+
+        <div class="guest-track">
+          No account? &nbsp;
+          <a href="/Cargo_Tracker_System/pages/track.html">Track a shipment as guest →</a>
+        </div>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="panel-register" class="panel">
+        <form id="form-register" novalidate>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="reg-username">Username</label>
+              <input id="reg-username" class="form-control" type="text"
+                     placeholder="jdoe" autocomplete="username" required minlength="3">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="reg-fullname">Full Name</label>
+              <input id="reg-fullname" class="form-control" type="text"
+                     placeholder="Jane Doe" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-email">Email Address</label>
+            <input id="reg-email" class="form-control" type="email"
+                   placeholder="jane@example.com" autocomplete="email" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="reg-password">Password</label>
+            <input id="reg-password" class="form-control" type="password"
+                   placeholder="Minimum 8 characters" autocomplete="new-password" required minlength="8">
+            <div class="form-hint">// Minimum 8 characters required</div>
+          </div>
+          <!-- CONFIRM PASSWORD (new field) -->
+          <div class="form-group">
+            <label class="form-label" for="reg-confirm-password">Confirm Password</label>
+            <input id="reg-confirm-password" class="form-control" type="password"
+                   placeholder="Re-enter your password" autocomplete="new-password" required>
+            <div class="form-hint" id="confirm-hint">// Must match the password above</div>
+          </div>
+          <button type="submit" class="btn-submit" id="btn-register">
+            Create Account <span class="btn-arrow">→</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- FORGOT PASSWORD -->
+      <div id="panel-forgot" class="panel">
+        <button class="back-link" id="btn-back-from-forgot">Back to sign in</button>
+        <form id="form-forgot" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="forgot-email">Registered Email</label>
+            <input id="forgot-email" class="form-control" type="email"
+                   placeholder="jane@example.com" autocomplete="email" required>
+            <div class="form-hint">// A reset link will be sent to this address</div>
+          </div>
+          <button type="submit" class="btn-submit" id="btn-forgot">
+            Send Reset Link <span class="btn-arrow">→</span>
+          </button>
+        </form>
+      </div>
+
+      <div class="form-footer">
+        <span>CargoTrack &copy; 2026</span>
+        <div class="footer-status">
+          <div class="footer-dot"></div>
+          <span>All systems operational</span>
+        </div>
+      </div>
+    </div><!-- .form-panel -->
+
+  </div><!-- .main -->
+
+  <footer class="bottombar">
+    <span>Jakarta EE 10 · GlassFish 7</span>
+    <div class="bottombar-center">
+      <span>Logistics Operations Platform</span>
+      <span>v1.0.0</span>
+    </div>
+    <span>© 2026 CargoTrack</span>
+  </footer>
+</div><!-- .shell -->
+
+<script>
+    const API_BASE  = '/Cargo_Tracker_System/api';
+    const TOKEN_KEY = 'cargo_tracker_token';
+    const USER_KEY  = 'cargo_tracker_user';
+
+    if (localStorage.getItem(TOKEN_KEY)) {
+        window.location.href = '/Cargo_Tracker_System/pages/dashboard.html';
+    }
+
+    /* Alert */
+    function showAlert(message, type) {
+        const icon = type === 'error' ? '⚠' : '✓';
+        document.getElementById('alert-box').innerHTML =
+            `<div class="alert alert-${type}"><span>${icon}</span><span>${message}</span></div>`;
+        if (type !== 'success') {
+            setTimeout(() => { document.getElementById('alert-box').innerHTML = ''; }, 6000);
+        }
+    }
+
+    /* Button loading state */
+    function setLoading(id, on, label, loadingLabel) {
+        const btn = document.getElementById(id);
+        btn.disabled = on;
+        btn.innerHTML = on
+            ? loadingLabel
+            : `${label} <span class="btn-arrow">→</span>`;
+    }
+
+    /* Panel switching */
+    const META = {
+        login:    { kicker: 'Secure Portal',    title: 'SIGN IN',        sub: 'Enter your credentials to continue' },
+        register: { kicker: 'New Account',      title: 'REGISTER',       sub: 'Fill in your details below' },
+        forgot:   { kicker: 'Account Recovery', title: 'RESET PASSWORD', sub: 'Enter your registered email' },
+    };
+
+    function resetConfirmField() {
+        const input = document.getElementById('reg-confirm-password');
+        const hint  = document.getElementById('confirm-hint');
+        input.classList.remove('input-error');
+        hint.classList.remove('hint-error', 'hint-ok');
+        hint.textContent = '// Must match the password above';
+    }
+
+    function showPanel(name) {
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.getElementById(`panel-${name}`).classList.add('active');
+        document.getElementById('alert-box').innerHTML = '';
+        resetConfirmField();
+
+        const m = META[name];
+        document.getElementById('form-kicker').textContent   = m.kicker;
+        document.getElementById('form-title').textContent    = m.title;
+        document.getElementById('form-subtitle').textContent = m.sub;
+
+        const isForgot = name === 'forgot';
+        document.getElementById('tabs-row').style.display = isForgot ? 'none' : '';
+
+        if (!isForgot) {
+            document.querySelectorAll('.tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === name);
+            });
+        }
+    }
+
+    /* Live confirm-password match feedback */
+    function checkPasswordMatch() {
+        const pw    = document.getElementById('reg-password').value;
+        const cpw   = document.getElementById('reg-confirm-password').value;
+        const input = document.getElementById('reg-confirm-password');
+        const hint  = document.getElementById('confirm-hint');
+
+        if (!cpw) {
+            resetConfirmField();
+            return;
+        }
+        if (pw !== cpw) {
+            input.classList.add('input-error');
+            hint.classList.add('hint-error');
+            hint.classList.remove('hint-ok');
+            hint.textContent = '// Passwords do not match';
+        } else {
+            input.classList.remove('input-error');
+            hint.classList.remove('hint-error');
+            hint.classList.add('hint-ok');
+            hint.textContent = '// ✓ Passwords match';
+        }
+    }
+
+    document.getElementById('reg-confirm-password').addEventListener('input', checkPasswordMatch);
+    document.getElementById('reg-password').addEventListener('input', checkPasswordMatch);
+
+    /* Tab switching */
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => showPanel(tab.dataset.tab));
+    });
+
+    /* Forgot / back buttons */
+    document.getElementById('btn-show-forgot').addEventListener('click', () => showPanel('forgot'));
+    document.getElementById('btn-back-from-forgot').addEventListener('click', () => showPanel('login'));
+
+    /* Login */
+    async function login() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        if (!username || !password) { showAlert('Please fill in all fields.', 'error'); return; }
+
+        setLoading('btn-login', true, 'Sign In', 'Signing in…');
+        try {
+            const res  = await fetch(`${API_BASE}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                localStorage.setItem(TOKEN_KEY, data.token);
+                localStorage.setItem(USER_KEY, JSON.stringify({ username: data.username, role: data.role }));
+                window.location.href = '/Cargo_Tracker_System/pages/dashboard.html';
+            } else {
+                showAlert(data.message || data.error || 'Invalid credentials.', 'error');
+                setLoading('btn-login', false, 'Sign In', '');
+            }
+        } catch {
+            showAlert('Cannot reach the server. Please try again.', 'error');
+            setLoading('btn-login', false, 'Sign In', '');
+        }
+    }
+
+    /* Register */
+    async function register() {
+        const username  = document.getElementById('reg-username').value.trim();
+        const fullName  = document.getElementById('reg-fullname').value.trim();
+        const email     = document.getElementById('reg-email').value.trim();
+        const password  = document.getElementById('reg-password').value;
+        const confirmPw = document.getElementById('reg-confirm-password').value;
+
+        if (!username || !fullName || !email || !password || !confirmPw) {
+            showAlert('Please fill in all fields.', 'error'); return;
+        }
+        if (password.length < 8) {
+            showAlert('Password must be at least 8 characters.', 'error'); return;
+        }
+        if (password !== confirmPw) {
+            showAlert('Passwords do not match. Please check and try again.', 'error');
+            document.getElementById('reg-confirm-password').classList.add('input-error');
+            return;
+        }
+
+        setLoading('btn-register', true, 'Create Account', 'Creating account…');
+        try {
+            const res  = await fetch(`${API_BASE}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, fullName, email, password })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showAlert('Account created! You can now sign in.', 'success');
+                showPanel('login');
+                document.getElementById('form-register').reset();
+                document.getElementById('login-username').value = username;
+            } else {
+                showAlert(data.message || data.error || 'Registration failed.', 'error');
+            }
+        } catch {
+            showAlert('Cannot reach the server. Please try again.', 'error');
+        }
+        setLoading('btn-register', false, 'Create Account', '');
+    }
+
+    /* Forgot password */
+    async function forgotPassword() {
+        const email = document.getElementById('forgot-email').value.trim();
+        if (!email) { showAlert('Please enter your email address.', 'error'); return; }
+
+        setLoading('btn-forgot', true, 'Send Reset Link', 'Sending…');
+        try {
+            await fetch(`${API_BASE}/auth/forgot-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            showAlert(
+                'If that email is registered you will receive a reset link shortly.',
+                'success'
+            );
+            document.getElementById('form-forgot').reset();
+        } catch {
+            showAlert('Cannot reach the server. Please try again.', 'error');
+        }
+        setLoading('btn-forgot', false, 'Send Reset Link', '');
+    }
+
+    /* Form submission */
+    document.getElementById('form-login').addEventListener('submit',    e => { e.preventDefault(); login(); });
+    document.getElementById('form-register').addEventListener('submit', e => { e.preventDefault(); register(); });
+    document.getElementById('form-forgot').addEventListener('submit',   e => { e.preventDefault(); forgotPassword(); });
+</script>
+</body>
+</html>

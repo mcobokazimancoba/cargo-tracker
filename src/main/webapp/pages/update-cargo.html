@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Cargo - Cargo Tracker</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .form-container { max-width: 600px; margin: 0 auto; }
+        .current-info { background: var(--bg-raised); padding: 16px; border-radius: var(--radius-md); margin-bottom: 20px; border-left: 4px solid var(--amber); }
+        .current-info h4 { margin-bottom: 12px; color: var(--amber); }
+        .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+        .info-label { color: var(--text-muted); font-weight: 500; }
+        .info-value { color: var(--text-primary); }
+        .search-section { margin-bottom: 24px; }
+    </style>
+</head>
+<body>
+<nav class="nav">
+    <div class="nav-logo"><div class="nav-logo-hex"></div>CargoTrack</div>
+    <div class="nav-links">
+        <a class="nav-link" data-page="dashboard" href="/Cargo_Tracker_System/pages/dashboard.html">Dashboard</a>
+        <a class="nav-link" data-page="book"      href="/Cargo_Tracker_System/pages/book.html">Book Shipment</a>
+        <a class="nav-link" data-page="track"     href="/Cargo_Tracker_System/pages/track.html">Track</a>
+        <a class="nav-link" data-page="update"    href="/Cargo_Tracker_System/pages/update-cargo.html">Update</a>
+        <a class="nav-link" data-page="search"    href="/Cargo_Tracker_System/pages/search.html">All Cargo</a>
+    </div>
+    <div class="nav-actions">
+        <span id="nav-user" class="nav-user-badge" style="display:none"></span>
+        <button id="btn-logout" class="btn btn-ghost btn-sm">Sign Out</button>
+    </div>
+</nav>
+
+<main class="page">
+    <div class="page-title">Update Cargo</div>
+    <div class="page-subtitle">Modify shipment details or cancel shipments</div>
+
+    <div id="alert-box"></div>
+
+    <div class="card search-section">
+        <div class="card-title">Find Shipment</div>
+        <div class="form-row">
+            <div class="form-group" style="flex: 1;">
+                <input type="text" id="searchTracking" class="form-control"
+                       placeholder="Enter Tracking Number (e.g., CGO-1001)">
+            </div>
+            <button id="searchBtn" class="btn btn-primary">Search</button>
+        </div>
+    </div>
+
+    <div id="updateSection" style="display: none;">
+
+        <div class="current-info" id="currentInfo"></div>
+
+        <div class="card">
+            <div class="card-title">Edit Shipment Details</div>
+            <form id="updateForm">
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <input type="text" id="editDescription" class="form-control">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Weight (kg)</label>
+                        <input type="number" id="editWeight" class="form-control" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Expected Arrival</label>
+                        <input type="date" id="editEta" class="form-control">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%">Save Changes</button>
+            </form>
+        </div>
+
+        <div class="card" style="margin-top: 20px; border-color: var(--red-dim);">
+            <div class="card-title" style="color: var(--red);">⚠️ Danger Zone</div>
+            <div class="form-group">
+                <label class="form-label">Cancel Reason</label>
+                <input type="text" id="cancelReason" class="form-control"
+                       placeholder="Why is this shipment being cancelled?">
+            </div>
+            <button id="cancelBtn" class="btn btn-danger"
+                    style="width:100%; display:none;">Cancel Shipment</button>
+            <button id="deleteBtn" class="btn btn-danger"
+                    style="width:100%; margin-top:10px; background:var(--red-dim); display:none;">
+                Delete Permanently
+            </button>
+        </div>
+
+        <div class="card" style="margin-top: 20px;">
+            <div class="card-title">Add Tracking Event</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Event Type</label>
+                    <select id="eventType" class="form-control">
+                        <option value="PICKED_UP">Picked Up</option>
+                        <option value="DEPARTED">Departed</option>
+                        <option value="ARRIVED_AT_PORT">Arrived at Port</option>
+                        <option value="DELIVERED">Delivered</option>
+                        <option value="EXCEPTION">Exception</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Location (UNLOCODE)</label>
+                    <input type="text" id="eventLocation" class="form-control" placeholder="USNYC">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Notes</label>
+                <input type="text" id="eventNotes" class="form-control" placeholder="Additional details...">
+            </div>
+            <button id="addEventBtn" class="btn btn-outline">Record Event</button>
+        </div>
+
+    </div>
+</main>
+
+<script type="module">
+    import { Auth, Can, CargoApi, showAlert, initNav } from '../js/api.js';
+
+    Auth.requireRole('ADMIN', 'OPERATOR');
+    initNav('update');
+
+    let currentCargo = null;
+
+    function showMessage(msg, type) {
+        showAlert('alert-box', msg, type);
+    }
+
+    function resetPage() {
+        document.getElementById('updateSection').style.display = 'none';
+        document.getElementById('searchTracking').value = '';
+        document.getElementById('cancelReason').value   = '';
+        currentCargo = null;
+    }
+
+    function renderCargoInfo(cargo) {
+        document.getElementById('currentInfo').innerHTML = `
+            <h4>📦 ${cargo.trackingNumber}</h4>
+            <div class="info-row">
+                <span class="info-label">Status:</span>
+                <span class="info-value">${cargo.status}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Description:</span>
+                <span class="info-value">${cargo.description || '-'}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Weight:</span>
+                <span class="info-value">${cargo.weightKg} kg</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Origin:</span>
+                <span class="info-value">${cargo.origin?.city} (${cargo.origin?.unlocode})</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Destination:</span>
+                <span class="info-value">${cargo.destination?.city} (${cargo.destination?.unlocode})</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Expected Arrival:</span>
+                <span class="info-value">${cargo.expectedArrival || 'Not set'}</span>
+            </div>
+        `;
+
+        document.getElementById('editDescription').value = cargo.description || '';
+        document.getElementById('editWeight').value      = cargo.weightKg;
+        document.getElementById('editEta').value         = cargo.expectedArrival || '';
+
+        const notFinal  = cargo.status !== 'CANCELLED' && cargo.status !== 'DELIVERED';
+        const canCancel = Can.updateShipment() && notFinal;
+        const canDelete = Can.cancelShipment();
+
+        document.getElementById('cancelBtn').style.display = canCancel ? 'block' : 'none';
+        document.getElementById('deleteBtn').style.display  = canDelete ? 'block' : 'none';
+    }
+
+    async function searchCargo() {
+        const trackingNumber = document.getElementById('searchTracking').value.trim().toUpperCase();
+        if (!trackingNumber) {
+            showMessage('Please enter a tracking number', 'error');
+            return;
+        }
+        try {
+            currentCargo = await CargoApi.track(trackingNumber);
+            renderCargoInfo(currentCargo);
+            document.getElementById('updateSection').style.display = 'block';
+            showMessage(`Loaded: ${trackingNumber}`, 'success');
+        } catch (err) {
+            showMessage(`Not found: ${trackingNumber}`, 'error');
+            document.getElementById('updateSection').style.display = 'none';
+            currentCargo = null;
+        }
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', searchCargo);
+    document.getElementById('searchTracking').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') searchCargo();
+    });
+
+    // Auto-load if linked from dashboard with ?tn=CGO-XXXX
+    const urlTn = new URLSearchParams(location.search).get('tn');
+    if (urlTn) {
+        document.getElementById('searchTracking').value = urlTn;
+        searchCargo();
+    }
+
+    // ── Save Changes ────────────────────────────────────────────────────────
+    document.getElementById('updateForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!currentCargo) return;
+        try {
+            currentCargo = await CargoApi.update(currentCargo.trackingNumber, {
+                description:     document.getElementById('editDescription').value.trim(),
+                weightKg:        parseFloat(document.getElementById('editWeight').value),
+                expectedArrival: document.getElementById('editEta').value || null
+            });
+            renderCargoInfo(currentCargo);
+            showMessage('Shipment updated successfully!', 'success');
+        } catch (err) {
+            showMessage('Update failed: ' + err.message, 'error');
+        }
+    });
+
+    // ── Cancel Shipment ─────────────────────────────────────────────────────
+    document.getElementById('cancelBtn').addEventListener('click', async () => {
+        if (!currentCargo) return;
+        const reason = document.getElementById('cancelReason').value.trim();
+        if (!confirm(`Cancel shipment ${currentCargo.trackingNumber}?`)) return;
+        try {
+            await CargoApi.cancel(currentCargo.trackingNumber);
+            showMessage(`Shipment cancelled${reason ? ': ' + reason : ''}`, 'success');
+            resetPage();
+        } catch (err) {
+            showMessage('Cancel failed: ' + err.message, 'error');
+        }
+    });
+
+    // ── Delete Permanently ──────────────────────────────────────────────────
+    document.getElementById('deleteBtn').addEventListener('click', async () => {
+        if (!currentCargo) return;
+        if (!confirm(`PERMANENT: Delete ${currentCargo.trackingNumber}? This cannot be undone.`)) return;
+        try {
+            await CargoApi.deletePermanent(currentCargo.trackingNumber);
+            showMessage(`Permanently deleted ${currentCargo.trackingNumber}`, 'success');
+            resetPage();
+        } catch (err) {
+            showMessage('Delete failed: ' + err.message, 'error');
+        }
+    });
+
+    // ── Add Tracking Event ──────────────────────────────────────────────────
+    document.getElementById('addEventBtn').addEventListener('click', async () => {
+        if (!currentCargo) return;
+        const locationUnlocode = document.getElementById('eventLocation').value.trim().toUpperCase();
+        if (!locationUnlocode) {
+            showMessage('Please enter a location UNLOCODE', 'error');
+            return;
+        }
+        try {
+            currentCargo = await CargoApi.addEvent(currentCargo.trackingNumber, {
+                eventType:        document.getElementById('eventType').value,
+                locationUnlocode,
+                occurredAt:       new Date().toISOString(),
+                notes:            document.getElementById('eventNotes').value.trim()
+            });
+            renderCargoInfo(currentCargo);
+            showMessage(`Event recorded at ${locationUnlocode}`, 'success');
+            document.getElementById('eventLocation').value = '';
+            document.getElementById('eventNotes').value    = '';
+        } catch (err) {
+            showMessage('Failed to add event: ' + err.message, 'error');
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Cargo - Cargo Tracker</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<nav class="nav">
+    <div class="nav-logo"><div class="nav-logo-hex"></div>CargoTrack</div>
+    <div class="nav-links">
+        <a class="nav-link" data-page="dashboard" href="dashboard.html">Dashboard</a>
+        <a class="nav-link" data-page="book" href="book.html">Book Shipment</a>
+        <a class="nav-link" data-page="track" href="track.html">Track</a>
+        <a class="nav-link active" data-page="search" href="search.html">All Cargo</a>
+        <a class="nav-link" data-page="update" href="update-cargo.html">Update</a>
+    </div>
+    <div class="nav-actions"><span id="nav-user"></span><button id="btn-logout" class="btn btn-ghost btn-sm">Sign Out</button></div>
+</nav>
+<main class="page">
+    <div class="page-title">All Shipments</div>
+    <div class="page-subtitle">Complete cargo register</div>
+    <div id="cargo-list" class="card"><div class="loading-row"><span class="spinner"></span> Loading...</div></div>
+</main>
+<script type="module">
+    import { Auth, CargoApi } from '../js/api.js';
+    if (!Auth.isLoggedIn()) { window.location.href = '/Cargo_Tracker_System/'; }
+    document.getElementById('btn-logout').onclick = () => { Auth.clearSession(); window.location.href = '/Cargo_Tracker_System/'; };
+    async function loadCargos() {
+        try {
+            const data = await CargoApi.getAll(0, 50);
+            let html = '<div class="table-wrap"><table class="table"><thead><tr><th>Tracking #</th><th>Description</th><th>Origin</th><th>Destination</th><th>Status</th><th>Weight</th></tr></thead><tbody>';
+            data.content.forEach(c => { html += `<tr><td><a href="track.html?tn=${c.trackingNumber}" class="tracking-num">${c.trackingNumber}</a></td><td>${c.description || '-'}</td><td>${c.origin?.city || '-'}</td><td>${c.destination?.city || '-'}</td><td><span class="badge badge-${c.status.toLowerCase()}">${c.status}</span></td><td>${c.weightKg} kg</td></tr>`; });
+            html += '</tbody></table></div>';
+            document.getElementById('cargo-list').innerHTML = html;
+        } catch (err) { document.getElementById('cargo-list').innerHTML = '<div class="empty-state">Error loading shipments</div>'; }
+    }
+    loadCargos();
+</script>
+</body>
+</html>

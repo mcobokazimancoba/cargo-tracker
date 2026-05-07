@@ -1,0 +1,27 @@
+# --- Build output ----------------------------------------------------------
+target/
+*.war
+*.jar
+*.class
+
+# --- IDE / editor ----------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+nbproject/private/
+nbactions.xml
+
+# --- OS --------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# --- Logs ------------------------------------------------------------------
+*.log
+
+# --- Secrets (will be introduced in step 6) --------------------------------
+.env
+.env.local
+*.local.properties

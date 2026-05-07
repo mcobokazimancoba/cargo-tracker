@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Shipment - Cargo Tracker</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .location-preview {
+            margin-top: 5px;
+            font-size: 0.72rem;
+            color: var(--amber);
+            letter-spacing: 0.06em;
+            min-height: 18px;
+            transition: opacity 150ms ease;
+        }
+        .location-preview.loading { color: var(--text-muted); }
+        .location-preview.error   { color: var(--red); }
+
+        .booking-summary {
+            background: var(--bg-raised);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            font-size: 0.75rem;
+            display: none;
+        }
+        .booking-summary.visible { display: block; }
+        .booking-summary-title {
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .booking-summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .booking-summary-row:last-child { border-bottom: none; }
+        .booking-summary-row span:first-child {
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        .booking-summary-row span:last-child {
+            text-align: right;
+            color: var(--text-primary);
+        }
+        .route-arrow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 12px 0 4px;
+            font-size: 0.72rem;
+        }
+        .route-arrow .loc { flex: 1; }
+        .route-arrow .arrow {
+            color: var(--amber);
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .loc-code {
+            font-weight: 700;
+            color: var(--amber);
+            letter-spacing: 0.08em;
+        }
+        .loc-name {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+    </style>
+</head>
+<body>
+<nav class="nav">
+    <div class="nav-logo"><div class="nav-logo-hex"></div>CargoTrack</div>
+    <div class="nav-links">
+        <a class="nav-link" data-page="dashboard" href="dashboard.html">Dashboard</a>
+        <a class="nav-link" data-page="book"      href="book.html">Book Shipment</a>
+        <a class="nav-link" data-page="track"     href="track.html">Track</a>
+        <a class="nav-link" data-page="search"    href="search.html">All Cargo</a>
+        <a class="nav-link" data-page="update"    href="update-cargo.html">Update</a>
+    </div>
+    <div class="nav-actions">
+        <span id="nav-user" class="nav-user-badge" style="display:none"></span>
+        <button id="btn-logout" class="btn btn-ghost btn-sm">Sign Out</button>
+    </div>
+</nav>
+
+<main class="page">
+    <div class="page-title">Book Shipment</div>
+    <div class="page-subtitle">Create a new cargo booking — a confirmation email will be sent to your address</div>
+
+    <div id="alert-box"></div>
+
+    <div class="card">
+        <form id="booking-form">
+
+            <!-- ORIGIN -->
+            <div class="form-group">
+                <label class="form-label">Origin UNLOCODE</label>
+                <input id="origin" class="form-control" placeholder="e.g. USNYC" maxlength="5" required
+                       autocomplete="off" style="text-transform:uppercase">
+                <div id="origin-preview" class="location-preview"></div>
+            </div>
+
+            <!-- DESTINATION -->
+            <div class="form-group">
+                <label class="form-label">Destination UNLOCODE</label>
+                <input id="destination" class="form-control" placeholder="e.g. NLRTM" maxlength="5" required
+                       autocomplete="off" style="text-transform:uppercase">
+                <div id="destination-preview" class="location-preview"></div>
+            </div>
+
+            <!-- ROUTE SUMMARY (shown once both locations resolved) -->
+            <div id="route-summary" class="booking-summary">
+                <div class="booking-summary-title">Route Preview</div>
+                <div class="route-arrow">
+                    <div class="loc" id="route-origin">
+                        <div class="loc-code" id="route-origin-code"></div>
+                        <div class="loc-name"  id="route-origin-name"></div>
+                    </div>
+                    <div class="arrow">→</div>
+                    <div class="loc" id="route-dest">
+                        <div class="loc-code" id="route-dest-code"></div>
+                        <div class="loc-name"  id="route-dest-name"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DESCRIPTION -->
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <input id="description" class="form-control" placeholder="e.g. Electronic components" required>
+            </div>
+
+            <!-- WEIGHT -->
+            <div class="form-group">
+                <label class="form-label">Weight (kg)</label>
+                <input id="weight" type="number" step="0.1" min="0.1" class="form-control"
+                       placeholder="e.g. 250" required>
+            </div>
+
+            <!-- ETA -->
+            <div class="form-group">
+                <label class="form-label">Expected Arrival</label>
+                <input id="eta" type="date" class="form-control">
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%">
+                Confirm Booking
+            </button>
+        </form>
+    </div>
+</main>
+
+<script type="module">
+    import { Auth, CargoApi, initNav, showAlert } from '../js/api.js';
+
+    Auth.requireAuth();
+    initNav('book');
+
+    // ── UNLOCODE → full name lookup ─────────────────────────────────────────
+    // We use the free UN/LOCODE CSV dataset via a public API proxy, with a
+    // Nominatim geocoder fallback so you always see a human-readable name.
+
+    const resolvedNames = { origin: null, destination: null };
+
+    // Debounce helper
+    function debounce(fn, ms) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    /**
+     * Look up a UNLOCODE using the public unlocode.net API, then fall back to
+     * Nominatim if the structured API returns nothing useful.
+     */
+    async function resolveUnlocode(code) {
+        if (!code || code.length < 4) return null;
+
+        const country = code.slice(0, 2).toUpperCase();
+        const place   = code.slice(2).toUpperCase();
+
+        // ① Try unlocode.net REST API (no key needed)
+        try {
+            const res  = await fetch(
+                `https://unlocode.info/api/v1/locode/${country}/${place}`,
+                { signal: AbortSignal.timeout(4000) }
+            );
+            if (res.ok) {
+                const data = await res.json();
+                const name = data?.name || data?.nameWoDiacritics;
+                if (name) return `${name}, ${country}`;
+            }
+        } catch { /* fall through */ }
+
+        // ② Nominatim geocoding fallback — search by the locode city string
+        try {
+            const q   = encodeURIComponent(`${place} ${country}`);
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/search?q=${q}&limit=1&format=json`,
+                {
+                    headers: { 'Accept-Language': 'en', 'User-Agent': 'CargoTracker/1.0' },
+                    signal: AbortSignal.timeout(5000)
+                }
+            );
+            if (res.ok) {
+                const hits = await res.json();
+                if (hits.length > 0) {
+                    // Build a clean "City, Country" string from display_name parts
+                    const parts = hits[0].display_name.split(',').map(s => s.trim());
+                    const city  = parts[0];
+                    const cntry = parts[parts.length - 1];
+                    return `${city}, ${cntry}`;
+                }
+            }
+        } catch { /* give up */ }
+
+        return null;
+    }
+
+    async function handleLocodeInput(inputId, previewId, field) {
+        const input   = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        const raw     = input.value.trim().toUpperCase();
+        input.value   = raw;
+        resolvedNames[field] = null;
+        updateRouteSummary();
+
+        if (raw.length < 5) {
+            preview.textContent  = raw.length > 0 ? 'Enter full 5-character UNLOCODE' : '';
+            preview.className    = 'location-preview';
+            return;
+        }
+
+        preview.textContent = '⟳ Looking up location…';
+        preview.className   = 'location-preview loading';
+
+        const name = await resolveUnlocode(raw);
+        if (name) {
+            preview.textContent  = `✓ ${name}`;
+            preview.className    = 'location-preview';
+            resolvedNames[field] = { code: raw, name };
+        } else {
+            preview.textContent  = '⚠ Location not found — double-check the UNLOCODE';
+            preview.className    = 'location-preview error';
+        }
+        updateRouteSummary();
+    }
+
+    function updateRouteSummary() {
+        const summary = document.getElementById('route-summary');
+        if (resolvedNames.origin && resolvedNames.destination) {
+            document.getElementById('route-origin-code').textContent = resolvedNames.origin.code;
+            document.getElementById('route-origin-name').textContent = resolvedNames.origin.name;
+            document.getElementById('route-dest-code').textContent   = resolvedNames.destination.code;
+            document.getElementById('route-dest-name').textContent   = resolvedNames.destination.name;
+            summary.classList.add('visible');
+        } else {
+            summary.classList.remove('visible');
+        }
+    }
+
+    const debouncedOrigin = debounce(
+        () => handleLocodeInput('origin', 'origin-preview', 'origin'), 500
+    );
+    const debouncedDest = debounce(
+        () => handleLocodeInput('destination', 'destination-preview', 'destination'), 500
+    );
+
+    document.getElementById('origin').addEventListener('input', debouncedOrigin);
+    document.getElementById('destination').addEventListener('input', debouncedDest);
+
+    // ── Form submission ─────────────────────────────────────────────────────
+    document.getElementById('booking-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.disabled    = true;
+        btn.textContent = 'Booking…';
+
+        const originCode = document.getElementById('origin').value.trim().toUpperCase();
+        const destCode   = document.getElementById('destination').value.trim().toUpperCase();
+
+        try {
+            const result = await CargoApi.book({
+                originUnlocode:      originCode,
+                destinationUnlocode: destCode,
+                // Pass resolved full names so the backend can use them in the email
+                originName:          resolvedNames.origin?.name  || originCode,
+                destinationName:     resolvedNames.destination?.name || destCode,
+                description:         document.getElementById('description').value.trim(),
+                weightKg:            parseFloat(document.getElementById('weight').value),
+                expectedArrival:     document.getElementById('eta').value || null
+            });
+
+            const originLabel = resolvedNames.origin
+                ? `${resolvedNames.origin.name} (${originCode})`
+                : originCode;
+            const destLabel = resolvedNames.destination
+                ? `${resolvedNames.destination.name} (${destCode})`
+                : destCode;
+
+            showAlert(
+                'alert-box',
+                `✓ Booking confirmed! Tracking: ${result.trackingNumber} — ` +
+                `${originLabel} → ${destLabel}. A confirmation email has been sent to you.`,
+                'success'
+            );
+            document.getElementById('booking-form').reset();
+            document.getElementById('origin-preview').textContent      = '';
+            document.getElementById('destination-preview').textContent = '';
+            resolvedNames.origin = resolvedNames.destination = null;
+            updateRouteSummary();
+        } catch (err) {
+            showAlert('alert-box', err.message || 'Booking failed. Please try again.', 'error');
+        } finally {
+            btn.disabled    = false;
+            btn.textContent = 'Confirm Booking';
+        }
+    });
+</script>
+</body>
+</html>

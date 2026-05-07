@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Cargo Tracker</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .chart-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+        }
+        .chart-title {
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            border-left: 3px solid var(--amber);
+            padding-left: 12px;
+        }
+        .insight-box {
+            background: var(--bg-raised);
+            border-left: 4px solid var(--amber);
+            padding: 16px;
+            margin-bottom: 20px;
+            border-radius: var(--radius-md);
+        }
+        .insight-title {
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .insight-text {
+            font-size: 0.85rem;
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+        .insight-highlight { color: var(--amber); font-weight: bold; }
+        .stats-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .stat-card-enhanced {
+            flex: 1;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        .stat-card-enhanced:hover { transform: translateY(-2px); border-color: var(--amber-dim); }
+        .stat-value-enhanced {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--amber);
+            font-family: var(--font-mono);
+        }
+        .stat-label-enhanced {
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        .stat-trend-up   { color: var(--green); font-size: 0.7rem; margin-top: 4px; }
+        .stat-trend-down { color: var(--red);   font-size: 0.7rem; margin-top: 4px; }
+        .table-container { max-height: 400px; overflow-y: auto; }
+
+        .scope-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-raised);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 10px 16px;
+            margin-bottom: 20px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        .scope-banner .scope-role {
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .scope-role-admin    { background: rgba(239,68,68,0.15);  color: #FCA5A5; }
+        .scope-role-operator { background: rgba(245,158,11,0.15); color: var(--amber); }
+        .scope-role-customer { background: rgba(34,197,94,0.15);  color: #86EFAC; }
+
+        .role-badge {
+            font-size: 0.55rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 4px;
+            margin-left: 6px;
+            font-weight: 700;
+        }
+        .role-admin    { background: rgba(239,68,68,0.2);  color: #FCA5A5; }
+        .role-operator { background: rgba(245,158,11,0.2); color: var(--amber); }
+        .role-customer { background: rgba(34,197,94,0.2);  color: #86EFAC; }
+
+        @media (max-width: 768px) {
+            .analytics-grid { grid-template-columns: 1fr; }
+            .stats-row { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+<nav class="nav">
+    <div class="nav-logo"><div class="nav-logo-hex"></div>CargoTrack</div>
+    <div class="nav-links">
+        <a class="nav-link" data-page="dashboard"  href="dashboard.html">Dashboard</a>
+        <a class="nav-link" data-page="book"       href="book.html">Book Shipment</a>
+        <a class="nav-link" data-page="track"      href="track.html">Track</a>
+        <a class="nav-link" data-page="search"     href="search.html">All Cargo</a>
+        <a class="nav-link" data-page="update"     href="update-cargo.html">Update</a>
+    </div>
+    <div class="nav-actions">
+        <span id="nav-user" class="nav-user-badge" style="display:none"></span>
+        <button id="btn-logout" class="btn btn-ghost btn-sm">Sign Out</button>
+    </div>
+</nav>
+
+<main class="page">
+    <div class="page-title">Analytics Dashboard</div>
+    <div class="page-subtitle" id="dashboardSubtitle">Real-time cargo insights &amp; performance metrics</div>
+
+    <div class="scope-banner" id="scopeBanner" style="display:none">
+        <span>Viewing as</span>
+        <span class="scope-role" id="scopeRoleBadge"></span>
+        <span id="scopeDescription"></span>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card-enhanced">
+            <div class="stat-value-enhanced" id="total">-</div>
+            <div class="stat-label-enhanced" id="totalLabel">Total Shipments</div>
+            <div class="stat-trend-up" id="totalTrend"></div>
+        </div>
+        <div class="stat-card-enhanced">
+            <div class="stat-value-enhanced" id="inTransit">-</div>
+            <div class="stat-label-enhanced">In Transit</div>
+            <div class="stat-trend-up" id="transitTrend">Active shipments</div>
+        </div>
+        <div class="stat-card-enhanced">
+            <div class="stat-value-enhanced" id="delivered">-</div>
+            <div class="stat-label-enhanced">Delivered</div>
+            <div class="stat-trend-up" id="deliveredTrend">Completion rate</div>
+        </div>
+        <div class="stat-card-enhanced">
+            <div class="stat-value-enhanced" id="onTimeRate">-</div>
+            <div class="stat-label-enhanced">On-Time Rate</div>
+            <div class="stat-trend-up" id="onTimeTrend">Performance</div>
+        </div>
+    </div>
+
+    <div class="insight-box">
+        <div class="insight-title">📊 KEY INSIGHTS</div>
+        <div class="insight-text" id="insightText">Loading analytics...</div>
+    </div>
+
+    <div class="analytics-grid">
+        <div class="chart-card">
+            <div class="chart-title">📈 Shipment Status Distribution</div>
+            <canvas id="statusChart" height="250"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">📍 Top Routes (Origin → Destination)</div>
+            <canvas id="routesChart" height="250"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">⚖️ Average Weight by Status</div>
+            <canvas id="weightChart" height="250"></canvas>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">📅 Shipments Booked — Last 7 Days</div>
+            <canvas id="trendChart" height="250"></canvas>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title" id="tableTitle">📋 Recent Shipments</div>
+        <div class="table-container">
+            <div id="shipments"><div class="loading-row"><span class="spinner"></span> Loading...</div></div>
+        </div>
+    </div>
+</main>
+
+<script type="module">
+    import { Auth, Can, CargoApi, initNav } from '../js/api.js';
+
+    Auth.requireAuth();
+    initNav('dashboard');
+
+    const user       = Auth.getUser();
+    const role       = user?.role || 'CUSTOMER';
+    const username   = user?.username || '';
+    const isCustomer = role === 'CUSTOMER';
+
+    const scopeBanner = document.getElementById('scopeBanner');
+    const scopeRole   = document.getElementById('scopeRoleBadge');
+    const scopeDesc   = document.getElementById('scopeDescription');
+    scopeBanner.style.display = 'flex';
+    scopeRole.textContent     = role;
+    scopeRole.className       = 'scope-role scope-role-' + role.toLowerCase();
+
+    if (isCustomer) {
+        scopeDesc.textContent = `Showing your shipments only (${username})`;
+        document.getElementById('totalLabel').textContent        = 'My Shipments';
+        document.getElementById('tableTitle').textContent        = '📋 My Shipments';
+        document.getElementById('dashboardSubtitle').textContent = 'Your personal shipment overview';
+    } else if (role === 'OPERATOR') {
+        scopeDesc.textContent = 'Showing all shipments — update & event recording enabled';
+    } else {
+        scopeDesc.textContent = 'Full access — all shipments, all actions';
+    }
+
+    let statusChart, routesChart, weightChart, trendChart;
+
+    async function loadDashboard() {
+        try {
+            const data = isCustomer
+                ? await CargoApi.getMyCargos(0, 100)
+                : await CargoApi.getAll(0, 100);
+
+            if (!data || !data.content) {
+                document.getElementById('shipments').innerHTML =
+                    '<div class="empty-state">No data returned. You may not have permission to view shipments.</div>';
+                document.getElementById('insightText').textContent = 'Unable to load analytics.';
+                return;
+            }
+
+            const shipments = data.content;
+            const total     = data.totalElements || 0;
+
+            const statusCount = { BOOKED:0, IN_TRANSIT:0, AT_DESTINATION:0, DELIVERED:0, CANCELLED:0 };
+            let   totalWeight = 0, delivered = 0;
+            const routeCount  = new Map();
+
+            shipments.forEach(s => {
+                const w = s.weightKg != null ? parseFloat(s.weightKg) : 0;
+                statusCount[s.status] = (statusCount[s.status] || 0) + 1;
+                totalWeight += w;
+                if (s.status === 'DELIVERED') delivered++;
+                const oc = s.origin?.unlocode, dc = s.destination?.unlocode;
+                if (oc && dc) routeCount.set(`${oc} → ${dc}`, (routeCount.get(`${oc} → ${dc}`) || 0) + 1);
+            });
+
+            const inTransit  = (statusCount.IN_TRANSIT || 0) + (statusCount.AT_DESTINATION || 0);
+            const onTimeRate = delivered > 0 ? Math.round((delivered / total) * 100) : 0;
+            const avgWeight  = total > 0 ? Math.round(totalWeight / total) : 0;
+
+            document.getElementById('total').textContent      = total;
+            document.getElementById('inTransit').textContent  = inTransit;
+            document.getElementById('delivered').textContent  = delivered;
+            document.getElementById('onTimeRate').textContent = onTimeRate + '%';
+
+            document.getElementById('totalTrend').textContent     = `Avg weight: ${avgWeight} kg`;
+            document.getElementById('transitTrend').textContent   = `${inTransit} moving`;
+            document.getElementById('deliveredTrend').textContent = `${delivered} completed`;
+            document.getElementById('onTimeTrend').innerHTML      =
+                onTimeRate >= 80 ? '✅ Excellent' : '⚠️ Needs improvement';
+
+            buildInsights(statusCount, total, inTransit, delivered, onTimeRate, avgWeight, routeCount);
+            buildStatusChart(statusCount);
+            buildRoutesChart(routeCount);
+            buildWeightChart(shipments);
+            buildTrendChart(shipments);
+            renderTable(shipments.slice(0, 10));
+
+        } catch (err) {
+            console.error('Dashboard error:', err);
+
+            // ── FIX 1: Auto logout if JWT expired or session invalid ────────
+            if (err.status === 401) {
+                Auth.clearSession();
+                window.location.href = '/Cargo_Tracker_System/';
+                return;
+            }
+
+            document.getElementById('shipments').innerHTML =
+                '<div class="empty-state">Error loading dashboard. Please refresh.</div>';
+            document.getElementById('insightText').textContent = 'Unable to load analytics. Please refresh.';
+        }
+    }
+
+    function buildInsights(statusCount, total, inTransit, delivered, onTimeRate, avgWeight, routeCount) {
+        if (total === 0) {
+            document.getElementById('insightText').textContent =
+                isCustomer
+                    ? 'You have no shipments yet. Book your first shipment to get started.'
+                    : 'No shipment data available yet.';
+            return;
+        }
+        const lines = [];
+        const top = Object.entries(statusCount).sort((a, b) => b[1] - a[1])[0];
+        lines.push(`📌 <span class="insight-highlight">${top[0]}</span> is the most common status (${top[1]} shipments, ${Math.round(top[1] / total * 100)}%)`);
+        lines.push(onTimeRate >= 80
+            ? `✅ <span class="insight-highlight">Strong delivery rate</span> at ${onTimeRate}%`
+            : `⚠️ <span class="insight-highlight">Delivery rate at ${onTimeRate}%</span> — room for improvement`);
+        if (inTransit > delivered) {
+            lines.push(`🚚 <span class="insight-highlight">${inTransit} shipments in transit</span> vs ${delivered} delivered`);
+        }
+        const topRoute = [...routeCount.entries()].sort((a, b) => b[1] - a[1])[0];
+        if (topRoute) lines.push(`🗺️ <span class="insight-highlight">Busiest route: ${topRoute[0]}</span> (${topRoute[1]} shipments)`);
+        document.getElementById('insightText').innerHTML = lines.map(l => `• ${l}`).join('<br>');
+    }
+
+    function buildStatusChart(statusCount) {
+        const ctx = document.getElementById('statusChart').getContext('2d');
+        if (statusChart) statusChart.destroy();
+        statusChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(statusCount),
+                datasets: [{
+                    label: 'Shipments',
+                    data: Object.values(statusCount),
+                    backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#22c55e', '#6b7280'],
+                    borderRadius: 6
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+        });
+    }
+
+    function buildRoutesChart(routeCount) {
+        const ctx       = document.getElementById('routesChart').getContext('2d');
+        const topRoutes = [...routeCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+        if (routesChart) routesChart.destroy();
+
+        // ── FIX 3: Show message when no route data exists ───────────────
+        if (!topRoutes.length) {
+            document.getElementById('routesChart').style.display = 'none';
+            const card = document.getElementById('routesChart').parentElement;
+            if (!card.querySelector('.no-data-msg')) {
+                const msg = document.createElement('p');
+                msg.className = 'no-data-msg';
+                msg.style.cssText = 'text-align:center;color:var(--text-muted);font-size:0.8rem;padding:40px 0';
+                msg.textContent = 'No route data yet';
+                card.appendChild(msg);
+            }
+            return;
+        }
+
+        document.getElementById('routesChart').style.display = '';
+        const existing = document.getElementById('routesChart').parentElement.querySelector('.no-data-msg');
+        if (existing) existing.remove();
+
+        routesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: topRoutes.map(r => r[0]),
+                datasets: [{ label: 'Count', data: topRoutes.map(r => r[1]), backgroundColor: '#f59e0b', borderRadius: 6 }]
+            },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+        });
+    }
+
+    function buildWeightChart(shipments) {
+        const ctx = document.getElementById('weightChart').getContext('2d');
+        const sw  = {};
+        shipments.forEach(s => {
+            const w = s.weightKg != null ? parseFloat(s.weightKg) : 0;
+            if (!sw[s.status]) sw[s.status] = { total: 0, count: 0 };
+            sw[s.status].total += w;
+            sw[s.status].count++;
+        });
+        const labels = Object.keys(sw);
+        if (weightChart) weightChart.destroy();
+        weightChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Avg Weight (kg)',
+                    data: labels.map(l => Math.round(sw[l].total / sw[l].count)),
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34,197,94,0.08)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+
+    function buildTrendChart(shipments) {
+        const ctx    = document.getElementById('trendChart').getContext('2d');
+        const labels = [], counts = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+            counts.push(0);
+        }
+        shipments.forEach(s => {
+            if (!s.createdAt) return;
+            const daysAgo = Math.floor((new Date() - new Date(s.createdAt)) / 86400000);
+            if (daysAgo >= 0 && daysAgo < 7) counts[6 - daysAgo]++;
+        });
+        if (trendChart) trendChart.destroy();
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Booked',
+                    data: counts,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245,158,11,0.08)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+
+    function renderTable(shipments) {
+        if (!shipments.length) {
+            document.getElementById('shipments').innerHTML =
+                '<div class="empty-state">' + (isCustomer ? 'You have no shipments yet.' : 'No shipments found.') + '</div>';
+            return;
+        }
+
+        const showCustomerCol = !isCustomer;
+        const canUpdate       = Can.updateShipment();
+        const canCancel       = Can.cancelShipment();
+
+        let html = `<div class="table-wrap"><table class="table"><thead><tr>
+            <th>Tracking #</th>
+            ${showCustomerCol ? '<th>Customer</th>' : ''}
+            <th>Origin</th>
+            <th>Destination</th>
+            <th>Status</th>
+            <th>Weight</th>
+            <th>Booked</th>
+            ${canUpdate ? '<th>Actions</th>' : ''}
+        </tr></thead><tbody>`;
+
+        shipments.forEach(c => {
+            const booked   = c.createdAt         ? new Date(c.createdAt).toLocaleDateString() : '—';
+            const origin   = c.origin?.city      || c.origin?.unlocode                        || '—';
+            const dest     = c.destination?.city || c.destination?.unlocode                   || '—';
+            const weight   = c.weightKg != null  ? `${c.weightKg} kg`                         : '—';
+            const customer = c.customerName      || c.customerUsername                        || '—';
+            const status   = (c.status || '').toLowerCase();
+
+            let actions = '';
+            if (canUpdate) {
+                actions += `<a href="update-cargo.html?tn=${c.trackingNumber}" class="btn btn-xs btn-ghost" title="Update">Edit</a> `;
+            }
+            if (canCancel && c.status !== 'CANCELLED' && c.status !== 'DELIVERED') {
+                actions += `<button onclick="cancelShipment('${c.trackingNumber}')" class="btn btn-xs btn-danger" title="Cancel">Cancel</button>`;
+            }
+
+            html += `<tr>
+                <td><a href="track.html?tn=${c.trackingNumber}" class="tracking-num">${c.trackingNumber}</a></td>
+                ${showCustomerCol ? `<td>${customer}</td>` : ''}
+                <td>${origin}</td>
+                <td>${dest}</td>
+                <td><span class="badge badge-${status}">${c.status || '—'}</span></td>
+                <td>${weight}</td>
+                <td>${booked}</td>
+                ${canUpdate ? `<td>${actions}</td>` : ''}
+            </tr>`;
+        });
+
+        html += '</tbody></table></div>';
+        document.getElementById('shipments').innerHTML = html;
+    }
+
+    window.cancelShipment = async (trackingNumber) => {
+        if (!Can.cancelShipment()) return;
+        if (!confirm(`Cancel shipment ${trackingNumber}? This cannot be undone.`)) return;
+        try {
+            await CargoApi.cancel(trackingNumber);
+            loadDashboard();
+        } catch (err) {
+            alert('Failed to cancel: ' + err.message);
+        }
+    };
+
+    // ── FIX 2: Load dashboard and auto-refresh every 30 seconds ─────────
+    loadDashboard();
+    setInterval(loadDashboard, 30000);
+</script>
+</body>
+</html>
