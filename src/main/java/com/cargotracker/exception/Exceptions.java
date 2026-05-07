@@ -17,31 +17,44 @@ import java.util.stream.Collectors;
 // Domain exceptions (package-private)
 // ─────────────────────────────────────────────
 
+// serialVersionUID on every concrete subclass:
+// AppException is Serializable (RuntimeException is), and the compiler warns
+// when a Serializable class doesn't declare an explicit serialVersionUID
+// because the synthesised one changes whenever the class shape does — which
+// silently breaks deserialisation. 1L is the conventional starting value;
+// bump if the class fields ever change.
+
 class ResourceNotFoundException extends AppException {
+    private static final long serialVersionUID = 1L;
     public ResourceNotFoundException(String resourceName, Object identifier) {
         super(resourceName + " not found with identifier: " + identifier, 404);
     }
 }
 
 class BusinessRuleException extends AppException {
+    private static final long serialVersionUID = 1L;
     public BusinessRuleException(String message) { super(message, 400); }
 }
 
 class InvalidStateTransitionException extends AppException {
+    private static final long serialVersionUID = 1L;
     public InvalidStateTransitionException(String currentState, String attemptedOperation) {
         super("Cannot perform '" + attemptedOperation + "' on cargo in state: " + currentState, 409);
     }
 }
 
 class ForbiddenException extends AppException {
+    private static final long serialVersionUID = 1L;
     public ForbiddenException(String message) { super(message, 403); }
 }
 
 class UnauthorizedException extends AppException {
+    private static final long serialVersionUID = 1L;
     public UnauthorizedException(String message) { super(message, 401); }
 }
 
 class DuplicateResourceException extends AppException {
+    private static final long serialVersionUID = 1L;
     public DuplicateResourceException(String resourceName, String field, Object value) {
         super(resourceName + " already exists with " + field + ": " + value, 409);
     }

@@ -2,12 +2,19 @@ package com.cargotracker.dto.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class RegisterRequest {  // ← Must be PUBLIC
 
+    // Username whitelist: letters, digits, dot, underscore, hyphen.
+    // Why a whitelist not a blacklist: a blacklist ("no spaces, no <") inevitably
+    // misses something (zero-width unicode, control chars, RTL overrides). A
+    // whitelist of safe characters is unambiguous and easy to defend in code review.
     @NotBlank
     @Size(min = 3, max = 50)
+    @Pattern(regexp = "^[A-Za-z0-9._-]+$",
+             message = "Username may only contain letters, digits, dot, underscore or hyphen")
     private String username;
 
     @NotBlank
