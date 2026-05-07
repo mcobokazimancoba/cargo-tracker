@@ -2,6 +2,7 @@ package com.cargotracker.service;
 
 import com.cargotracker.dto.request.Requests;
 import com.cargotracker.dto.response.Responses;
+import com.cargotracker.entity.AppUser;
 import com.cargotracker.entity.Cargo;
 import com.cargotracker.entity.Location;
 import com.cargotracker.entity.TrackingEvent;
@@ -183,6 +184,46 @@ public class CargoService {
         Cargo cargo = cargoRepository
                 .findByTrackingNumberWithDetails(trackingNumber)
                 .orElseThrow(() -> Exceptions.notFound("Cargo", trackingNumber));
+        return Responses.CargoDetail.from(cargo);
+    }
+
+    /**
+     * Ownership-aware tracking lookup.
+     *
+     * Authorization matrix (matches the spec "users can only read their
+     * own shipments"):
+     * <pre>
+     *   caller is null (guest)          → allowed   (preserves the public
+     *                                                tracking flow that the
+     *                                                booking-confirmation
+     *                                                email link relies on)
+     *   caller role is OPERATOR/ADMIN   → allowed
+     *   caller role is CUSTOMER and
+     *     owns the cargo                → allowed
+     *   caller role is CUSTOMER and
+     *     does not own the cargo        → 403
+     * </pre>
+     *
+     * The check lives here, not in the resource, so any future endpoint
+     * that wants the same rule has one place to call. Resources stay thin
+     * and consistent.
+     */
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public Responses.CargoDetail findByTrackingNumberAuthorized(
+            @NotBlank String trackingNumber, AppUser caller) {
+
+        Cargo cargo = cargoRepository
+                .findByTrackingNumberWithDetails(trackingNumber)
+                .orElseThrow(() -> Exceptions.notFound("Cargo", trackingNumber));
+
+        // Only CUSTOMER role triggers the ownership check.
+        // Guests (caller == null) and elevated roles see anything.
+        if (caller != null
+                && caller.getRole() == AppUser.Role.CUSTOMER
+                && !caller.getUsername().equals(cargo.getCustomerUsername())) {
+            throw Exceptions.forbidden("You can only view your own shipments");
+        }
+
         return Responses.CargoDetail.from(cargo);
     }
 

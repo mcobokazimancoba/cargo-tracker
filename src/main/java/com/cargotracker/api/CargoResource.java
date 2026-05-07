@@ -110,16 +110,23 @@ public class CargoResource {
         return Response.ok(cargoService.findAll(page, size)).build();
     }
 
-    // ── GET /cargos/{trackingNumber} — public shipment tracking ──────────────
+    // ── GET /cargos/{trackingNumber} — shipment tracking with optional auth ─
 
     @GET
     @Path("/{trackingNumber}")
     public Response track(@PathParam("trackingNumber") String trackingNumber,
                           @Context ContainerRequestContext ctx) {
 
-        // Public endpoint (AuthFilter allows unauthenticated GETs on CGO- paths).
-        // We still accept an authenticated caller so customers can track their own.
-        Responses.CargoDetail detail = cargoService.findByTrackingNumber(trackingNumber);
+        // Three caller types are valid here:
+        //   1. Anonymous guest        — allowed (the public tracking page)
+        //   2. OPERATOR / ADMIN       — allowed (any cargo)
+        //   3. CUSTOMER who owns it   — allowed
+        // A CUSTOMER who does NOT own the cargo gets 403. The decision lives
+        // in CargoService so the rule is enforced consistently regardless of
+        // which resource calls it.
+        AppUser caller = getUser(ctx);   // may be null on guest access
+        Responses.CargoDetail detail =
+                cargoService.findByTrackingNumberAuthorized(trackingNumber, caller);
         return Response.ok(detail).build();
     }
 

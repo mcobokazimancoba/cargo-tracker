@@ -39,35 +39,50 @@ public class AuthFilter implements ContainerRequestFilter {
             path = path.substring(1);
         }
 
-        // Allow public endpoints through without a token
-        if (isPublicEndpoint(path, method)) {
-            return;
-        }
+        boolean publicEndpoint = isPublicEndpoint(path, method);
 
-        // All other endpoints require a valid Bearer token
         String authHeader = ctx.getHeaderString(AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
+        boolean tokenPresent = authHeader != null && authHeader.startsWith(BEARER_PREFIX);
+
+        // Private endpoint with no token → 401 immediately. Nothing else to do.
+        if (!publicEndpoint && !tokenPresent) {
             abort401(ctx, "Missing or invalid Authorization header");
             return;
         }
 
+        // Public endpoint with no token → genuine anonymous access. Allow.
+        if (publicEndpoint && !tokenPresent) {
+            return;
+        }
+
+        // From here on, a token IS present. Try to validate it.
+        // Why bother on a public endpoint? So that a logged-in caller can be
+        // identified for fine-grained checks downstream — e.g. "this cargo is
+        // public for guests, but if a CUSTOMER is logged in they must be the
+        // owner". Without this, AuthFilter would return early and hide the
+        // caller's identity from CargoResource.
         String token = authHeader.substring(BEARER_PREFIX.length()).trim();
         if (token.isBlank()) {
+            if (publicEndpoint) return;       // empty token + public path = anonymous
             abort401(ctx, "Empty token");
             return;
         }
 
-        // Validate token and resolve the user
         String username;
         try {
             username = authService.validateToken(token);
         } catch (Exception e) {
+            // Bad/expired token on a public endpoint is NOT an error — treat
+            // the caller as anonymous so the existing guest-tracking flow
+            // doesn't break for users whose session lapsed in another tab.
+            if (publicEndpoint) return;
             abort401(ctx, e.getMessage());
             return;
         }
 
         Optional<AppUser> userOpt = userRepository.findActiveByUsername(username);
         if (userOpt.isEmpty()) {
+            if (publicEndpoint) return;       // unknown account on public path = anonymous
             abort401(ctx, "Invalid or inactive account");
             return;
         }

@@ -201,37 +201,29 @@ public class AuthService {
     @Transactional
     public void resetPassword(@NotNull @Valid Requests.ResetPassword request) throws Exception {
 
-        System.out.println("[AuthService] resetPassword called with token: " + request.getToken());
-
+        // Note: deliberately NOT logging the raw token. A reset token is a
+        // bearer credential — anyone holding it can change the password —
+        // so it must never end up in log files. We log the user ID once we
+        // have one, since that's safe and useful for support.
         PasswordResetToken prt = resetTokenRepository
                 .findByToken(request.getToken())
-                .orElseThrow(() -> {
-                    System.out.println("[AuthService] Token NOT found in DB");
-                    return Exceptions.badRequest("Invalid or expired reset token");
-                });
-
-        System.out.println("[AuthService] Token found, expired=" + prt.isExpired() + ", used=" + prt.isUsed());
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired reset token"));
 
         if (prt.isUsed() || prt.isExpired()) {
+            // Same generic message as "token not found" — don't leak whether
+            // the failure was unknown vs. consumed vs. expired.
             throw Exceptions.badRequest("Invalid or expired reset token");
         }
 
         // Fetch user directly to ensure it is a managed entity in this transaction
         AppUser user = userRepository.findById(prt.getUser().getId())
-                .orElseThrow(() -> {
-                    System.out.println("[AuthService] User NOT found for token");
-                    return Exceptions.badRequest("User not found");
-                });
-
-        System.out.println("[AuthService] Updating password for user: " + user.getUsername());
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired reset token"));
 
         user.setPasswordHash(hashPassword(request.getNewPassword()));
-
         userRepository.update(user);  // explicitly persist the change
-
         resetTokenRepository.deleteAllForUser(user.getId());
 
-        System.out.println("[AuthService] Password updated and token deleted successfully");
+        LOG.info(() -> "Password reset completed for user id=" + user.getId());
     }
 
     // ── Token generation ──────────────────────────────────────────────────────
