@@ -44,13 +44,15 @@ GRANT ALL PRIVILEGES ON DATABASE cargo_tracker TO cargo_app;
 
 The schema is **not** auto-generated. `persistence.xml` is set to
 `schema-generation.database.action=none` so the app never touches DDL on
-startup. For first-time setup either:
+startup. Run the committed DDL once after creating the database:
 
-- Run your own DDL script (one is not committed yet — derive it from the
-  `@Entity` classes under `src/main/java/com/cargotracker/entity/`), or
-- Temporarily flip `persistence.xml` to `create` for the very first
-  deploy, let EclipseLink build the tables, then flip it back to `none`
-  before any real data exists.
+```bash
+psql -U cargo_app -d cargo_tracker -f db/schema.sql
+```
+
+That file lives at [`db/schema.sql`](db/schema.sql). It seeds three
+sample locations (Johannesburg, Rotterdam, New York) and explains how to
+promote your first registered user to `ADMIN` in a comment at the bottom.
 
 ### 2. JDBC connection pool in GlassFish
 
@@ -404,10 +406,25 @@ src/main/java/com/cargotracker/
 
 ## Tests
 
-Step 8 of the security work will add a small focused test suite covering
-registration, login (success + brute-force lockout) and one protected
-endpoint. The test sources live under `src/test/java`, run via
-`mvn test`.
+```bash
+mvn test
+```
+
+A small, focused JUnit 5 + Mockito suite under `src/test/java/`. Three
+test classes, 15 methods total — deliberately not exhaustive (full
+coverage was out of scope for this branch). They exercise the security-
+critical paths added in this branch:
+
+| Test class                         | What it proves                                             |
+| ---------------------------------- | ---------------------------------------------------------- |
+| `AuthServiceTest`                  | Registration normalises and hashes; login round-trips a JWT; wrong password / forged signature → 401 |
+| `LoginThrottleServiceTest`         | Brute-force lockout fires at exactly N failures, isolates per (IP, user), survives case-rotation, clears on success, ages out |
+| `CargoServiceAuthorizationTest`    | Per-customer ownership rule on the protected tracking lookup (guest / OPERATOR / ADMIN / owner-CUSTOMER all allowed; non-owner CUSTOMER → 403) |
+
+Why unit tests not Arquillian: every dependency on these services is
+injectable, the behaviours under test are pure business logic, and the
+PBKDF2 hash + JWT round-trip work without a JTA transaction. Integration
+tests would be 10× slower for no extra coverage.
 
 ---
 

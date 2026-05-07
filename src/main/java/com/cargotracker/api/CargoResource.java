@@ -198,12 +198,11 @@ public class CargoResource {
                            String trackingNumber,
                            @Context ContainerRequestContext ctx) {
 
+        // RoleFilter already restricts DELETE on cargos/.+ to ADMIN, so an
+        // unauthenticated caller or a non-ADMIN role can never reach this
+        // method. We keep only the null-check as a defence-in-depth assertion.
         AppUser caller = getUser(ctx);
         if (caller == null) return unauthorized("Authentication required");
-
-        if (caller.getRole() == AppUser.Role.CUSTOMER) {
-            return forbidden("Customers cannot cancel shipments");
-        }
 
         Responses.CargoSummary summary = cargoService.cancel(trackingNumber);
         return Response.ok(summary).build();
