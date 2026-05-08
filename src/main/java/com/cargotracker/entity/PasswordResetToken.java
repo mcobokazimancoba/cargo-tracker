@@ -39,8 +39,15 @@ public class PasswordResetToken {
     @JoinColumn(name = "user_id", nullable = false)
     private AppUser user;
 
-    /** When this token was created — used to enforce TTL_MINUTES. */
-    @Column(nullable = false)
+    /**
+     * When this token was created — used to enforce TTL_MINUTES.
+     *
+     * Explicit name="created_at" — see the same note on
+     * {@link EmailVerificationToken#createdAt}: snake-case DB column,
+     * camelCase Java field, must be mapped explicitly so EclipseLink
+     * generates the right SQL.
+     */
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     /** Whether this token has already been consumed. */

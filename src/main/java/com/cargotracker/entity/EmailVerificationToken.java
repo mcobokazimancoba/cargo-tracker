@@ -42,7 +42,12 @@ public class EmailVerificationToken {
     @JoinColumn(name = "user_id", nullable = false)
     private AppUser user;
 
-    @Column(nullable = false)
+    // Explicit name="created_at" because the DB column is snake_case (per
+    // db/schema.sql) but the field is camelCase. JPA's default mapping uses
+    // the field name verbatim, so without this annotation EclipseLink would
+    // generate INSERT INTO ... (createdAt) which PostgreSQL folds to
+    // "createdat" (no underscore) and rejects with "column does not exist".
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
