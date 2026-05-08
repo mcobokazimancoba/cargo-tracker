@@ -156,11 +156,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_evt_token ON email_verification_tokens (to
 -- else is created by registered users.
 -- =============================================================================
 
--- Three locations covering the three sample routes used in the booking UI.
+-- 16 major shipping hubs across six continents — enough variety that the
+-- booking dropdown feels like a real port catalogue instead of three
+-- random sample rows. Every code matches a coordinate in track.html's
+-- COORDS table so the map renders for every seeded route.
 INSERT INTO locations (id, unlocode, city, country) VALUES
-    (nextval('location_id_seq'), 'ZAJNB', 'Johannesburg',  'South Africa'),
-    (nextval('location_id_seq'), 'NLRTM', 'Rotterdam',     'Netherlands'),
-    (nextval('location_id_seq'), 'USNYC', 'New York',      'United States')
+    (nextval('location_id_seq'), 'ZAJNB', 'Johannesburg',   'South Africa'),
+    (nextval('location_id_seq'), 'ZADUR', 'Durban',         'South Africa'),
+    (nextval('location_id_seq'), 'ZACPT', 'Cape Town',      'South Africa'),
+    (nextval('location_id_seq'), 'NLRTM', 'Rotterdam',      'Netherlands'),
+    (nextval('location_id_seq'), 'USNYC', 'New York',       'United States'),
+    (nextval('location_id_seq'), 'USLAX', 'Los Angeles',    'United States'),
+    (nextval('location_id_seq'), 'CNSHA', 'Shanghai',       'China'),
+    (nextval('location_id_seq'), 'HKHKG', 'Hong Kong',      'Hong Kong'),
+    (nextval('location_id_seq'), 'SGSIN', 'Singapore',      'Singapore'),
+    (nextval('location_id_seq'), 'JPTYO', 'Tokyo',          'Japan'),
+    (nextval('location_id_seq'), 'KRPUS', 'Busan',          'South Korea'),
+    (nextval('location_id_seq'), 'DEHAM', 'Hamburg',        'Germany'),
+    (nextval('location_id_seq'), 'AEDXB', 'Dubai',          'United Arab Emirates'),
+    (nextval('location_id_seq'), 'AUSYD', 'Sydney',         'Australia'),
+    (nextval('location_id_seq'), 'GBSOU', 'Southampton',    'United Kingdom'),
+    (nextval('location_id_seq'), 'ESBCN', 'Barcelona',      'Spain')
 ON CONFLICT (unlocode) DO NOTHING;
 
 -- Note on initial admin: not seeded here because the password hash format

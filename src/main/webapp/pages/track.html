@@ -126,15 +126,23 @@
     }
 
     // ── Port coordinate lookup ───────────────────────────────────────────────
+    // Keep this in sync with the seed rows in db/schema.sql. Any UN/LOCODE
+    // that exists in `locations` but is missing here will fall through to the
+    // "Map not available" message in renderMap() — harmless, but visible.
     const COORDS = {
         'USNYC': { lat: 40.7128,  lng: -74.0060,  name: 'New York'      },
+        'USLAX': { lat: 34.0522,  lng:-118.2437,  name: 'Los Angeles'   },
         'NLRTM': { lat: 51.9244,  lng:   4.4777,  name: 'Rotterdam'     },
         'CNSHA': { lat: 31.2304,  lng: 121.4737,  name: 'Shanghai'      },
+        'HKHKG': { lat: 22.3193,  lng: 114.1694,  name: 'Hong Kong'     },
         'SGSIN': { lat:  1.3521,  lng: 103.8198,  name: 'Singapore'     },
         'AEDXB': { lat: 25.2048,  lng:  55.2708,  name: 'Dubai'         },
-        'USLAX': { lat: 34.0522,  lng:-118.2437,  name: 'Los Angeles'   },
         'DEHAM': { lat: 53.5511,  lng:   9.9937,  name: 'Hamburg'       },
         'JPTYO': { lat: 35.6762,  lng: 139.6503,  name: 'Tokyo'         },
+        'KRPUS': { lat: 35.1796,  lng: 129.0756,  name: 'Busan'         },
+        'AUSYD': { lat:-33.8688,  lng: 151.2093,  name: 'Sydney'        },
+        'GBSOU': { lat: 50.9097,  lng:  -1.4044,  name: 'Southampton'   },
+        'ESBCN': { lat: 41.3851,  lng:   2.1734,  name: 'Barcelona'     },
         'ZADUR': { lat:-29.8587,  lng:  31.0218,  name: 'Durban'        },
         'ZACPT': { lat:-33.9249,  lng:  18.4241,  name: 'Cape Town'     },
         'ZAJNB': { lat:-26.2041,  lng:  28.0473,  name: 'Johannesburg'  }

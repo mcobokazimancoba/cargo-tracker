@@ -3,80 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book Shipment - Cargo Tracker</title>
+    <title>Book Shipment — Cargo Tracker</title>
     <link rel="stylesheet" href="../css/style.css">
     <style>
-        .location-preview {
-            margin-top: 5px;
-            font-size: 0.72rem;
-            color: var(--amber);
-            letter-spacing: 0.06em;
-            min-height: 18px;
-            transition: opacity 150ms ease;
+        /* ── Searchable location combobox ────────────────────────────────── */
+        .combobox { position: relative; }
+        .combobox-input { width: 100%; cursor: text; }
+        .combobox-input.has-selection {
+            background: rgba(245,158,11,0.06);
+            border-color: rgba(245,158,11,0.3);
         }
-        .location-preview.loading { color: var(--text-muted); }
-        .location-preview.error   { color: var(--red); }
+        .combobox-clear {
+            position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer;
+            color: var(--text-muted); font-size: 1rem; padding: 4px 8px;
+            display: none; transition: color 0.15s;
+        }
+        .combobox-clear:hover { color: var(--red); }
+        .combobox-input.has-selection ~ .combobox-clear { display: block; }
 
-        .booking-summary {
+        .combobox-list {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
             background: var(--bg-raised);
-            border: 1px solid var(--border);
+            border: 1px solid var(--border-strong);
             border-radius: var(--radius-sm);
-            padding: 14px 16px;
-            margin-bottom: 20px;
-            font-size: 0.75rem;
+            max-height: 280px; overflow-y: auto;
+            z-index: 100; display: none;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+        }
+        .combobox-list.open { display: block; }
+        .combobox-option {
+            padding: 10px 14px; cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px;
+            transition: background 0.12s;
+        }
+        .combobox-option:last-child { border-bottom: none; }
+        .combobox-option:hover, .combobox-option.highlighted {
+            background: rgba(245,158,11,0.08);
+        }
+        .combobox-option-main {
+            font-size: 0.88rem; color: var(--text-primary);
+            display: flex; flex-direction: column;
+        }
+        .combobox-option-city { font-weight: 500; }
+        .combobox-option-country {
+            font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;
+        }
+        .combobox-option-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; color: var(--amber);
+            letter-spacing: 0.08em;
+            padding: 3px 8px;
+            background: rgba(245,158,11,0.1);
+            border: 1px solid rgba(245,158,11,0.25);
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .combobox-empty {
+            padding: 18px 14px; text-align: center;
+            font-size: 0.78rem; color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* highlight matched substring inside the city name */
+        .match { color: var(--amber); font-weight: 600; }
+
+        /* ── Route preview ──────────────────────────────────────────────── */
+        .route-preview {
+            background: var(--bg-raised);
+            border: 1px solid rgba(245,158,11,0.25);
+            border-radius: var(--radius-md);
+            padding: 18px 20px;
+            margin: 24px 0;
             display: none;
         }
-        .booking-summary.visible { display: block; }
-        .booking-summary-title {
-            font-size: 0.62rem;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 10px;
+        .route-preview.visible { display: block; animation: route-in 0.4s ease-out; }
+        @keyframes route-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
         }
-        .booking-summary-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 12px;
-            padding: 5px 0;
-            border-bottom: 1px solid var(--border);
-            color: var(--text-secondary);
+        .route-preview-label {
+            font-size: 0.6rem; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--text-muted);
+            margin-bottom: 14px;
         }
-        .booking-summary-row:last-child { border-bottom: none; }
-        .booking-summary-row span:first-child {
-            font-size: 0.62rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            flex-shrink: 0;
-        }
-        .booking-summary-row span:last-child {
-            text-align: right;
-            color: var(--text-primary);
-        }
-        .route-arrow {
-            display: flex;
+        .route-line {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            gap: 10px;
-            margin: 12px 0 4px;
-            font-size: 0.72rem;
+            gap: 16px;
         }
-        .route-arrow .loc { flex: 1; }
-        .route-arrow .arrow {
-            color: var(--amber);
-            font-size: 1rem;
-            flex-shrink: 0;
+        .route-port { display: flex; flex-direction: column; gap: 4px; }
+        .route-port.dest { text-align: right; }
+        .route-port-city {
+            font-size: 1.05rem; font-weight: 600; color: var(--text-primary);
         }
-        .loc-code {
-            font-weight: 700;
-            color: var(--amber);
-            letter-spacing: 0.08em;
+        .route-port-country {
+            font-size: 0.78rem; color: var(--text-secondary);
         }
-        .loc-name {
-            font-size: 0.68rem;
-            color: var(--text-muted);
-            margin-top: 2px;
+        .route-port-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; letter-spacing: 0.1em;
+            color: var(--amber); margin-top: 2px;
+        }
+        .route-arrow-big {
+            color: var(--amber); font-size: 1.4rem;
+            position: relative; padding: 0 4px;
+        }
+        .route-arrow-big::before {
+            content: ''; position: absolute; top: 50%; left: -8px; right: -8px;
+            height: 1px; background: linear-gradient(90deg, transparent, var(--amber), transparent);
+            transform: translateY(-50%);
+        }
+
+        /* slimmer hint about selecting from real ports */
+        .field-help {
+            font-size: 0.7rem; color: var(--text-muted);
+            margin-top: 5px; letter-spacing: 0.04em;
+        }
+        .field-help.error { color: var(--red); }
+
+        /* form layout tweaks */
+        .booking-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+        }
+        @media (max-width: 720px) {
+            .booking-row { grid-template-columns: 1fr; }
+            .route-line { grid-template-columns: 1fr; gap: 8px; }
+            .route-port.dest { text-align: left; }
+            .route-arrow-big { transform: rotate(90deg); }
+            .route-arrow-big::before { display: none; }
         }
     </style>
 </head>
@@ -98,61 +156,80 @@
 
 <main class="page">
     <div class="page-title">Book Shipment</div>
-    <div class="page-subtitle">Create a new cargo booking — a confirmation email will be sent to your address</div>
+    <div class="page-subtitle">Pick the origin and destination ports — a confirmation email will be sent to your address.</div>
 
     <div id="alert-box"></div>
 
     <div class="card">
         <form id="booking-form">
 
-            <!-- ORIGIN -->
-            <div class="form-group">
-                <label class="form-label">Origin UNLOCODE</label>
-                <input id="origin" class="form-control" placeholder="e.g. USNYC" maxlength="5" required
-                       autocomplete="off" style="text-transform:uppercase">
-                <div id="origin-preview" class="location-preview"></div>
-            </div>
-
-            <!-- DESTINATION -->
-            <div class="form-group">
-                <label class="form-label">Destination UNLOCODE</label>
-                <input id="destination" class="form-control" placeholder="e.g. NLRTM" maxlength="5" required
-                       autocomplete="off" style="text-transform:uppercase">
-                <div id="destination-preview" class="location-preview"></div>
-            </div>
-
-            <!-- ROUTE SUMMARY (shown once both locations resolved) -->
-            <div id="route-summary" class="booking-summary">
-                <div class="booking-summary-title">Route Preview</div>
-                <div class="route-arrow">
-                    <div class="loc" id="route-origin">
-                        <div class="loc-code" id="route-origin-code"></div>
-                        <div class="loc-name"  id="route-origin-name"></div>
+            <div class="booking-row">
+                <!-- ORIGIN -->
+                <div class="form-group">
+                    <label class="form-label" for="origin-input">Origin Port</label>
+                    <div class="combobox" id="origin-combo">
+                        <input id="origin-input" class="form-control combobox-input"
+                               type="text" placeholder="Type a city or country…"
+                               autocomplete="off" required>
+                        <button type="button" class="combobox-clear" data-target="origin" aria-label="Clear origin">×</button>
+                        <div class="combobox-list" id="origin-list" role="listbox"></div>
                     </div>
-                    <div class="arrow">→</div>
-                    <div class="loc" id="route-dest">
-                        <div class="loc-code" id="route-dest-code"></div>
-                        <div class="loc-name"  id="route-dest-name"></div>
+                    <input type="hidden" id="origin-code">
+                    <div class="field-help" id="origin-help">Search by city, country, or UN/LOCODE.</div>
+                </div>
+
+                <!-- DESTINATION -->
+                <div class="form-group">
+                    <label class="form-label" for="destination-input">Destination Port</label>
+                    <div class="combobox" id="destination-combo">
+                        <input id="destination-input" class="form-control combobox-input"
+                               type="text" placeholder="Type a city or country…"
+                               autocomplete="off" required>
+                        <button type="button" class="combobox-clear" data-target="destination" aria-label="Clear destination">×</button>
+                        <div class="combobox-list" id="destination-list" role="listbox"></div>
+                    </div>
+                    <input type="hidden" id="destination-code">
+                    <div class="field-help" id="destination-help">Search by city, country, or UN/LOCODE.</div>
+                </div>
+            </div>
+
+            <!-- ROUTE PREVIEW -->
+            <div id="route-preview" class="route-preview">
+                <div class="route-preview-label">Route Preview</div>
+                <div class="route-line">
+                    <div class="route-port" id="preview-origin">
+                        <div class="route-port-city"     id="preview-origin-city">—</div>
+                        <div class="route-port-country"  id="preview-origin-country">—</div>
+                        <div class="route-port-code"     id="preview-origin-code">—</div>
+                    </div>
+                    <div class="route-arrow-big">→</div>
+                    <div class="route-port dest" id="preview-dest">
+                        <div class="route-port-city"     id="preview-dest-city">—</div>
+                        <div class="route-port-country"  id="preview-dest-country">—</div>
+                        <div class="route-port-code"     id="preview-dest-code">—</div>
                     </div>
                 </div>
             </div>
 
-            <!-- DESCRIPTION -->
-            <div class="form-group">
-                <label class="form-label">Description</label>
-                <input id="description" class="form-control" placeholder="e.g. Electronic components" required>
-            </div>
+            <div class="booking-row">
+                <!-- DESCRIPTION -->
+                <div class="form-group">
+                    <label class="form-label" for="description">Description</label>
+                    <input id="description" class="form-control"
+                           placeholder="e.g. Electronic components" required>
+                </div>
 
-            <!-- WEIGHT -->
-            <div class="form-group">
-                <label class="form-label">Weight (kg)</label>
-                <input id="weight" type="number" step="0.1" min="0.1" class="form-control"
-                       placeholder="e.g. 250" required>
+                <!-- WEIGHT -->
+                <div class="form-group">
+                    <label class="form-label" for="weight">Weight (kg)</label>
+                    <input id="weight" type="number" step="0.1" min="0.1" class="form-control"
+                           placeholder="e.g. 250" required>
+                </div>
             </div>
 
             <!-- ETA -->
             <div class="form-group">
-                <label class="form-label">Expected Arrival</label>
+                <label class="form-label" for="eta">Expected Arrival</label>
                 <input id="eta" type="date" class="form-control">
             </div>
 
@@ -164,152 +241,257 @@
 </main>
 
 <script type="module">
-    import { Auth, CargoApi, initNav, showAlert } from '../js/api.js';
+    import { Auth, CargoApi, LocationApi, initNav, showAlert } from '../js/api.js';
 
     Auth.requireAuth();
     initNav('book');
 
-    // ── UNLOCODE → full name lookup ─────────────────────────────────────────
-    // We use the free UN/LOCODE CSV dataset via a public API proxy, with a
-    // Nominatim geocoder fallback so you always see a human-readable name.
+    /* ──────────────────────────────────────────────────────────────
+       Searchable location combobox
+       Backed by GET /api/locations — we cache the full list in
+       memory the first time and filter client-side. With ~16 rows
+       there's no point round-tripping to PostgreSQL on every keystroke.
+       ────────────────────────────────────────────────────────────── */
 
-    const resolvedNames = { origin: null, destination: null };
+    let LOCATIONS = [];                                   // populated on load
+    const SELECTED = { origin: null, destination: null }; // { unlocode, city, country }
 
-    // Debounce helper
-    function debounce(fn, ms) {
-        let t;
-        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-    }
-
-    /**
-     * Look up a UNLOCODE using the public unlocode.net API, then fall back to
-     * Nominatim if the structured API returns nothing useful.
-     */
-    async function resolveUnlocode(code) {
-        if (!code || code.length < 4) return null;
-
-        const country = code.slice(0, 2).toUpperCase();
-        const place   = code.slice(2).toUpperCase();
-
-        // ① Try unlocode.net REST API (no key needed)
+    /** Pull the list once on page load, plus a tiny shimmer if it lags. */
+    async function loadLocations() {
         try {
-            const res  = await fetch(
-                `https://unlocode.info/api/v1/locode/${country}/${place}`,
-                { signal: AbortSignal.timeout(4000) }
-            );
-            if (res.ok) {
-                const data = await res.json();
-                const name = data?.name || data?.nameWoDiacritics;
-                if (name) return `${name}, ${country}`;
+            LOCATIONS = await LocationApi.list();
+            // Sort alphabetically by city for a predictable dropdown order.
+            LOCATIONS.sort((a, b) => a.city.localeCompare(b.city));
+        } catch (err) {
+            console.error('Failed to load locations:', err);
+            showAlert('alert-box',
+                'Could not load the port catalogue. Refresh the page or contact an admin.', 'error');
+        }
+    }
+
+    /** Build a single dropdown <div> for one location, with optional substring highlighting. */
+    function renderOption(loc, query) {
+        const opt = document.createElement('div');
+        opt.className = 'combobox-option';
+        opt.dataset.unlocode = loc.unlocode;
+        opt.setAttribute('role', 'option');
+
+        const city    = highlight(loc.city, query);
+        const country = highlight(loc.country, query);
+        const code    = highlight(loc.unlocode, query);
+
+        opt.innerHTML = `
+            <div class="combobox-option-main">
+                <span class="combobox-option-city">${city}</span>
+                <span class="combobox-option-country">${country}</span>
+            </div>
+            <span class="combobox-option-code">${code}</span>
+        `;
+        return opt;
+    }
+
+    /** Highlight every case-insensitive occurrence of `query` inside `text`. */
+    function highlight(text, query) {
+        if (!query) return escapeHtml(text);
+        const safe   = escapeHtml(text);
+        const needle = escapeRegex(query);
+        return safe.replace(new RegExp(`(${needle})`, 'ig'), '<span class="match">$1</span>');
+    }
+    function escapeHtml(s)  { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+    /** Filter the cached list by user's free-text query (city OR country OR code substring). */
+    function filterLocations(query) {
+        if (!query) return LOCATIONS.slice(0, 20);
+        const q = query.toLowerCase();
+        return LOCATIONS.filter(loc =>
+            loc.city.toLowerCase().includes(q)    ||
+            loc.country.toLowerCase().includes(q) ||
+            loc.unlocode.toLowerCase().includes(q)
+        );
+    }
+
+    /** Wire up one combobox (origin or destination). All state lives in SELECTED[field]. */
+    function setupCombobox(field) {
+        const input = document.getElementById(`${field}-input`);
+        const list  = document.getElementById(`${field}-list`);
+        const codeHidden = document.getElementById(`${field}-code`);
+        const help  = document.getElementById(`${field}-help`);
+
+        let highlightedIdx = -1;
+
+        function rebuild(query) {
+            const matches = filterLocations(query);
+            list.innerHTML = '';
+            highlightedIdx = -1;
+
+            if (!matches.length) {
+                const empty = document.createElement('div');
+                empty.className = 'combobox-empty';
+                empty.textContent = `No ports match "${query}".`;
+                list.appendChild(empty);
+                return;
             }
-        } catch { /* fall through */ }
+            matches.forEach((loc, idx) => {
+                const opt = renderOption(loc, query);
+                opt.addEventListener('mousedown', e => {       // mousedown not click — fires before input.blur
+                    e.preventDefault();
+                    select(loc);
+                });
+                opt.addEventListener('mouseenter', () => {
+                    list.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
+                    opt.classList.add('highlighted');
+                    highlightedIdx = idx;
+                });
+                list.appendChild(opt);
+            });
+        }
 
-        // ② Nominatim geocoding fallback — search by the locode city string
-        try {
-            const q   = encodeURIComponent(`${place} ${country}`);
-            const res = await fetch(
-                `https://nominatim.openstreetmap.org/search?q=${q}&limit=1&format=json`,
-                {
-                    headers: { 'Accept-Language': 'en', 'User-Agent': 'CargoTracker/1.0' },
-                    signal: AbortSignal.timeout(5000)
+        function open() {
+            rebuild(input.value.trim());
+            list.classList.add('open');
+        }
+        function close() { list.classList.remove('open'); }
+
+        function select(loc) {
+            SELECTED[field] = loc;
+            input.value = `${loc.city}, ${loc.country}`;
+            input.classList.add('has-selection');
+            codeHidden.value = loc.unlocode;
+            help.textContent = `Selected: ${loc.unlocode}`;
+            help.classList.remove('error');
+            close();
+            updateRoutePreview();
+            validateNotSameAsOther(field);
+        }
+
+        function clear() {
+            SELECTED[field] = null;
+            input.value = '';
+            input.classList.remove('has-selection');
+            codeHidden.value = '';
+            help.textContent = 'Search by city, country, or UN/LOCODE.';
+            help.classList.remove('error');
+            updateRoutePreview();
+            input.focus();
+        }
+
+        // Input events
+        input.addEventListener('focus', open);
+        input.addEventListener('input', () => {
+            // Typing invalidates any prior selection
+            SELECTED[field] = null;
+            codeHidden.value = '';
+            input.classList.remove('has-selection');
+            help.textContent = 'Search by city, country, or UN/LOCODE.';
+            help.classList.remove('error');
+            rebuild(input.value.trim());
+            list.classList.add('open');
+            updateRoutePreview();
+        });
+        input.addEventListener('blur', () => setTimeout(close, 100));    // delay so click can land
+
+        // Keyboard navigation
+        input.addEventListener('keydown', e => {
+            const opts = [...list.querySelectorAll('.combobox-option')];
+            if (!opts.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                highlightedIdx = Math.min(opts.length - 1, highlightedIdx + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                highlightedIdx = Math.max(0, highlightedIdx - 1);
+            } else if (e.key === 'Enter') {
+                if (highlightedIdx >= 0 && opts[highlightedIdx]) {
+                    e.preventDefault();
+                    const code = opts[highlightedIdx].dataset.unlocode;
+                    const loc = LOCATIONS.find(l => l.unlocode === code);
+                    if (loc) select(loc);
                 }
-            );
-            if (res.ok) {
-                const hits = await res.json();
-                if (hits.length > 0) {
-                    // Build a clean "City, Country" string from display_name parts
-                    const parts = hits[0].display_name.split(',').map(s => s.trim());
-                    const city  = parts[0];
-                    const cntry = parts[parts.length - 1];
-                    return `${city}, ${cntry}`;
-                }
+                return;
+            } else if (e.key === 'Escape') {
+                close();
+                return;
+            } else {
+                return;
             }
-        } catch { /* give up */ }
+            opts.forEach(o => o.classList.remove('highlighted'));
+            opts[highlightedIdx]?.classList.add('highlighted');
+            opts[highlightedIdx]?.scrollIntoView({ block: 'nearest' });
+        });
 
-        return null;
+        // Clear button
+        document.querySelector(`.combobox-clear[data-target="${field}"]`)
+                .addEventListener('click', clear);
     }
 
-    async function handleLocodeInput(inputId, previewId, field) {
-        const input   = document.getElementById(inputId);
-        const preview = document.getElementById(previewId);
-        const raw     = input.value.trim().toUpperCase();
-        input.value   = raw;
-        resolvedNames[field] = null;
-        updateRouteSummary();
-
-        if (raw.length < 5) {
-            preview.textContent  = raw.length > 0 ? 'Enter full 5-character UNLOCODE' : '';
-            preview.className    = 'location-preview';
-            return;
+    /** Reject same-as-other selection inline, BEFORE submission, to spare the user a server round-trip. */
+    function validateNotSameAsOther(justChanged) {
+        const o = SELECTED.origin?.unlocode;
+        const d = SELECTED.destination?.unlocode;
+        if (o && d && o === d) {
+            const help = document.getElementById(`${justChanged}-help`);
+            help.textContent = '✗ Origin and destination cannot be the same port.';
+            help.classList.add('error');
         }
+    }
 
-        preview.textContent = '⟳ Looking up location…';
-        preview.className   = 'location-preview loading';
+    function updateRoutePreview() {
+        const preview = document.getElementById('route-preview');
+        const o = SELECTED.origin;
+        const d = SELECTED.destination;
 
-        const name = await resolveUnlocode(raw);
-        if (name) {
-            preview.textContent  = `✓ ${name}`;
-            preview.className    = 'location-preview';
-            resolvedNames[field] = { code: raw, name };
+        if (o && d) {
+            document.getElementById('preview-origin-city').textContent    = o.city;
+            document.getElementById('preview-origin-country').textContent = o.country;
+            document.getElementById('preview-origin-code').textContent    = o.unlocode;
+            document.getElementById('preview-dest-city').textContent      = d.city;
+            document.getElementById('preview-dest-country').textContent   = d.country;
+            document.getElementById('preview-dest-code').textContent      = d.unlocode;
+            preview.classList.add('visible');
         } else {
-            preview.textContent  = '⚠ Location not found — double-check the UNLOCODE';
-            preview.className    = 'location-preview error';
-        }
-        updateRouteSummary();
-    }
-
-    function updateRouteSummary() {
-        const summary = document.getElementById('route-summary');
-        if (resolvedNames.origin && resolvedNames.destination) {
-            document.getElementById('route-origin-code').textContent = resolvedNames.origin.code;
-            document.getElementById('route-origin-name').textContent = resolvedNames.origin.name;
-            document.getElementById('route-dest-code').textContent   = resolvedNames.destination.code;
-            document.getElementById('route-dest-name').textContent   = resolvedNames.destination.name;
-            summary.classList.add('visible');
-        } else {
-            summary.classList.remove('visible');
+            preview.classList.remove('visible');
         }
     }
 
-    const debouncedOrigin = debounce(
-        () => handleLocodeInput('origin', 'origin-preview', 'origin'), 500
-    );
-    const debouncedDest = debounce(
-        () => handleLocodeInput('destination', 'destination-preview', 'destination'), 500
-    );
+    /* ── Bootstrap on page load ───────────────────────────────────────── */
+    await loadLocations();
+    setupCombobox('origin');
+    setupCombobox('destination');
 
-    document.getElementById('origin').addEventListener('input', debouncedOrigin);
-    document.getElementById('destination').addEventListener('input', debouncedDest);
+    /* ── Default the ETA picker to "tomorrow" — friendlier than blank ──── */
+    const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+    document.getElementById('eta').value = tomorrow.toISOString().slice(0, 10);
+    document.getElementById('eta').min   = tomorrow.toISOString().slice(0, 10);
 
-    // ── Form submission ─────────────────────────────────────────────────────
+    /* ── Form submission ──────────────────────────────────────────────── */
     document.getElementById('booking-form').addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        if (!SELECTED.origin || !SELECTED.destination) {
+            showAlert('alert-box', 'Please pick both an origin and a destination port.', 'error');
+            return;
+        }
+        if (SELECTED.origin.unlocode === SELECTED.destination.unlocode) {
+            showAlert('alert-box', 'Origin and destination cannot be the same port.', 'error');
+            return;
+        }
 
         const btn = e.target.querySelector('button[type="submit"]');
         btn.disabled    = true;
         btn.textContent = 'Booking…';
 
-        const originCode = document.getElementById('origin').value.trim().toUpperCase();
-        const destCode   = document.getElementById('destination').value.trim().toUpperCase();
-
         try {
             const result = await CargoApi.book({
-                originUnlocode:      originCode,
-                destinationUnlocode: destCode,
-                // Pass resolved full names so the backend can use them in the email
-                originName:          resolvedNames.origin?.name  || originCode,
-                destinationName:     resolvedNames.destination?.name || destCode,
+                originUnlocode:      SELECTED.origin.unlocode,
+                destinationUnlocode: SELECTED.destination.unlocode,
                 description:         document.getElementById('description').value.trim(),
                 weightKg:            parseFloat(document.getElementById('weight').value),
                 expectedArrival:     document.getElementById('eta').value || null
             });
 
-            const originLabel = resolvedNames.origin
-                ? `${resolvedNames.origin.name} (${originCode})`
-                : originCode;
-            const destLabel = resolvedNames.destination
-                ? `${resolvedNames.destination.name} (${destCode})`
-                : destCode;
+            const originLabel = `${SELECTED.origin.city}, ${SELECTED.origin.country}`;
+            const destLabel   = `${SELECTED.destination.city}, ${SELECTED.destination.country}`;
 
             showAlert(
                 'alert-box',
@@ -317,11 +499,20 @@
                 `${originLabel} → ${destLabel}. A confirmation email has been sent to you.`,
                 'success'
             );
+
+            // Reset everything for a possible second booking
             document.getElementById('booking-form').reset();
-            document.getElementById('origin-preview').textContent      = '';
-            document.getElementById('destination-preview').textContent = '';
-            resolvedNames.origin = resolvedNames.destination = null;
-            updateRouteSummary();
+            ['origin', 'destination'].forEach(f => {
+                SELECTED[f] = null;
+                document.getElementById(`${f}-input`).value = '';
+                document.getElementById(`${f}-input`).classList.remove('has-selection');
+                document.getElementById(`${f}-code`).value = '';
+                document.getElementById(`${f}-help`).textContent = 'Search by city, country, or UN/LOCODE.';
+                document.getElementById(`${f}-help`).classList.remove('error');
+            });
+            updateRoutePreview();
+            // Restore the friendly default ETA again after reset() blanked it
+            document.getElementById('eta').value = tomorrow.toISOString().slice(0, 10);
         } catch (err) {
             showAlert('alert-box', err.message || 'Booking failed. Please try again.', 'error');
         } finally {
