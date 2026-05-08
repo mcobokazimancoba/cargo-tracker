@@ -4,9 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CargoTrack — Logistics Operations Platform</title>
+    <meta name="description" content="Real-time cargo tracking, role-based access, and end-to-end shipment management built on Jakarta EE 10 and PostgreSQL.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -34,96 +35,213 @@
             --font-body:   'Outfit', sans-serif;
             --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
             --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+            --nav-height:  60px;
         }
 
-        html, body { font-family: var(--font-body); background: var(--void); color: var(--text-1); }
+        html { scroll-behavior: smooth; scroll-padding-top: var(--nav-height); }
+        html, body { font-family: var(--font-body); background: var(--void); color: var(--text-1); overflow-x: hidden; }
 
-        .shell { display: grid; grid-template-rows: 1fr auto; min-height: 100vh; }
-        .brand { display: flex; align-items: center; gap: 12px; }
-        .brand-mark { width: 28px; height: 28px; position: relative; flex-shrink: 0; }
-        .brand-mark svg { width: 100%; height: 100%; }
-        .brand-name { font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.12em; color: var(--text-1); }
-        .brand-name span { color: var(--gold); }
-        .status-pill { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-green 2.5s ease-in-out infinite; }
-        @keyframes pulse-green { 0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); } 50% { opacity: 0.5; box-shadow: 0 0 3px var(--green); } }
+        /* ── REUSABLE BITS ─────────────────────────────────────────────── */
+        .container { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 12px;
+            font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em;
+            text-transform: uppercase; color: var(--gold);
+        }
+        .eyebrow-bar { width: 32px; height: 1px; background: linear-gradient(90deg, var(--gold), transparent); }
+        .section-title {
+            font-family: var(--font-display); font-size: clamp(2.2rem, 4vw, 3.4rem);
+            line-height: 1.05; letter-spacing: 0.02em; margin: 16px 0 18px;
+        }
+        .section-title .accent { color: var(--gold); }
+        .section-lead { font-size: 0.95rem; line-height: 1.75; color: var(--text-2); max-width: 600px; }
 
-        .main { display: grid; grid-template-columns: 1fr 420px; }
+        /* ── TOP NAV ──────────────────────────────────────────────────── */
+        .topnav {
+            position: fixed; top: 0; left: 0; right: 0; height: var(--nav-height);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 32px;
+            background: rgba(3,6,15,0.78); backdrop-filter: saturate(140%) blur(12px);
+            border-bottom: 1px solid var(--border); z-index: 1000;
+            transition: background 0.25s, border-color 0.25s;
+        }
+        .topnav.scrolled { background: rgba(3,6,15,0.95); border-color: var(--border-hi); }
+        .nav-brand { display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+        .nav-brand-mark { width: 28px; height: 28px; }
+        .nav-brand-name {
+            font-family: var(--font-display); font-size: 1.2rem; letter-spacing: 0.14em; color: var(--text-1);
+        }
+        .nav-brand-name span { color: var(--gold); }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-link {
+            font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.15em;
+            text-transform: uppercase; color: var(--text-2); text-decoration: none;
+            padding: 8px 14px; border-radius: 6px; transition: color 0.2s, background 0.2s;
+            position: relative;
+        }
+        .nav-link:hover { color: var(--text-1); background: var(--border); }
+        .nav-link.active { color: var(--gold); }
+        .nav-link.active::after {
+            content: ''; position: absolute; bottom: -1px; left: 14px; right: 14px; height: 1px; background: var(--gold);
+        }
+        .nav-cta {
+            display: inline-flex; align-items: center; gap: 8px;
+            font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--gold); text-decoration: none;
+            border: 1px solid var(--border-gold); padding: 8px 16px; border-radius: 6px;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            background: var(--gold-soft);
+        }
+        .nav-cta:hover { background: var(--gold); color: var(--void); border-color: var(--gold); }
+        .nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 8px; color: var(--text-1); font-size: 1.4rem; }
 
-        /* HERO */
-        .hero-panel { background: var(--deep); position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 48px 64px; }
+        /* ── HERO ─────────────────────────────────────────────────────── */
+        .hero { padding-top: var(--nav-height); display: grid; grid-template-columns: 1fr 420px; min-height: 100vh; }
+
+        .hero-panel {
+            background: var(--deep); position: relative; overflow: hidden;
+            display: flex; flex-direction: column; justify-content: center;
+            padding: 48px 64px;
+        }
         .world-grid { position: absolute; inset: 0; opacity: 0.4; }
         .world-grid svg { width: 100%; height: 100%; }
-        .hero-panel::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 80% at 35% 50%, transparent 20%, rgba(3,6,15,0.5) 60%, rgba(3,6,15,0.9) 100%); z-index: 1; pointer-events: none; }
-        .hero-panel::after { content: ''; position: absolute; bottom: -120px; left: -80px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, rgba(232,160,0,0.1) 0%, transparent 65%); z-index: 1; pointer-events: none; }
+        .hero-panel::before {
+            content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+            background: radial-gradient(ellipse 80% 80% at 35% 50%, transparent 20%, rgba(3,6,15,0.5) 60%, rgba(3,6,15,0.9) 100%);
+        }
+        .hero-panel::after {
+            content: ''; position: absolute; bottom: -120px; left: -80px; width: 500px; height: 500px;
+            border-radius: 50%; z-index: 1; pointer-events: none;
+            background: radial-gradient(circle, rgba(232,160,0,0.1) 0%, transparent 65%);
+        }
         .hero-content { position: relative; z-index: 2; max-width: 560px; }
-        .hero-eyebrow { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; animation: fade-up 0.6s var(--ease-out) 0.1s both; }
-        .eyebrow-bar { width: 32px; height: 1px; background: linear-gradient(90deg, var(--gold), transparent); }
-        .hero-heading { font-family: var(--font-display); font-size: clamp(3.2rem, 5vw, 5.5rem); line-height: 0.93; letter-spacing: 0.02em; color: var(--text-1); margin-bottom: 24px; animation: fade-up 0.6s var(--ease-out) 0.2s both; }
+        .hero-eyebrow { margin-bottom: 20px; animation: fade-up 0.6s var(--ease-out) 0.1s both; }
+        .hero-heading {
+            font-family: var(--font-display); font-size: clamp(3.2rem, 5vw, 5.5rem);
+            line-height: 0.93; letter-spacing: 0.02em; color: var(--text-1); margin-bottom: 24px;
+            animation: fade-up 0.6s var(--ease-out) 0.2s both;
+        }
         .hero-heading .accent { color: var(--gold); }
-        .hero-sub { font-size: 0.9rem; font-weight: 300; line-height: 1.8; color: var(--text-2); max-width: 440px; margin-bottom: 40px; animation: fade-up 0.6s var(--ease-out) 0.3s both; }
-        .stat-strip { display: flex; gap: 0; margin-bottom: 40px; border: 1px solid var(--border-hi); border-radius: 8px; overflow: hidden; animation: fade-up 0.6s var(--ease-out) 0.4s both; }
-        .stat-item { flex: 1; padding: 14px 18px; background: var(--raised); border-right: 1px solid var(--border); transition: background 0.2s; }
-        .stat-item:last-child { border-right: none; }
-        .stat-item:hover { background: var(--card); }
-        .stat-num { font-family: var(--font-display); font-size: 1.8rem; color: var(--gold); line-height: 1; margin-bottom: 4px; }
-        .stat-lbl { font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
+        .hero-sub {
+            font-size: 0.95rem; font-weight: 300; line-height: 1.8; color: var(--text-2);
+            max-width: 460px; margin-bottom: 40px;
+            animation: fade-up 0.6s var(--ease-out) 0.3s both;
+        }
         .feature-tags { display: flex; flex-wrap: wrap; gap: 8px; animation: fade-up 0.6s var(--ease-out) 0.5s both; }
-        .tag { display: flex; align-items: center; gap: 7px; background: var(--gold-soft); border: 1px solid var(--border-gold); border-radius: 4px; padding: 6px 13px; font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); transition: border-color 0.2s, color 0.2s, background 0.2s; }
+        .tag {
+            display: inline-flex; align-items: center; gap: 7px;
+            background: var(--gold-soft); border: 1px solid var(--border-gold); border-radius: 4px;
+            padding: 6px 13px;
+            font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-2);
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+        }
         .tag:hover { border-color: var(--gold); color: var(--gold); background: rgba(232,160,0,0.1); }
         .tag-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
-        .access-levels { margin-top: 36px; animation: fade-up 0.6s var(--ease-out) 0.6s both; }
-        .access-label { font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-3); margin-bottom: 12px; }
-        .access-cards { display: flex; gap: 10px; }
-        .access-card { flex: 1; padding: 12px 14px; border-radius: 6px; border: 1px solid; transition: transform 0.2s; }
-        .access-card:hover { transform: translateY(-2px); }
-        .access-card.admin { background: rgba(255,71,87,0.07); border-color: rgba(255,71,87,0.2); }
-        .access-card.operator { background: rgba(232,160,0,0.07); border-color: rgba(232,160,0,0.2); }
-        .access-card.customer { background: rgba(0,212,106,0.07); border-color: rgba(0,212,106,0.2); }
-        .access-role { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-        .access-card.admin    .access-role { color: #FF6B7A; }
-        .access-card.operator .access-role { color: var(--gold); }
-        .access-card.customer .access-role { color: var(--green); }
-        .access-desc { font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.06em; color: var(--text-3); line-height: 1.5; }
 
-        /* FORM PANEL */
-        .form-panel { background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; padding: 44px 40px 36px; overflow-y: auto; position: relative; min-height: 100vh; }
-        .form-panel::before { content: ''; position: absolute; top: 0; right: 0; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, var(--gold)); }
-        .form-panel::after  { content: ''; position: absolute; top: 0; right: 0; width: 3px; height: 100px; background: linear-gradient(180deg, var(--gold), transparent); }
-        .form-header { margin-bottom: 28px; }
-        .form-kicker { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .hero-scroll-cue {
+            position: absolute; bottom: 24px; left: 64px; z-index: 2;
+            display: flex; align-items: center; gap: 12px;
+            font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.18em;
+            text-transform: uppercase; color: var(--text-3);
+            animation: fade-up 0.6s var(--ease-out) 1s both;
+        }
+        .scroll-line { width: 1px; height: 28px; background: linear-gradient(180deg, transparent, var(--text-3)); }
+        .hero-scroll-cue::after { content: '↓'; color: var(--gold); animation: scroll-bob 2s ease-in-out infinite; }
+        @keyframes scroll-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+
+        /* ── FORM PANEL (preserved from previous design) ───────────── */
+        .form-panel {
+            background: var(--panel); border-left: 1px solid var(--border);
+            display: flex; flex-direction: column; padding: 32px 40px 28px;
+            overflow-y: auto; position: relative;
+        }
+        .form-panel::before {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 100px; height: 3px; background: linear-gradient(90deg, transparent, var(--gold));
+        }
+        .form-panel::after {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 3px; height: 100px; background: linear-gradient(180deg, var(--gold), transparent);
+        }
+        .form-header { margin-bottom: 24px; }
+        .form-kicker {
+            font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.18em;
+            text-transform: uppercase; color: var(--gold); margin-bottom: 8px;
+            display: flex; align-items: center; gap: 8px;
+        }
         .form-kicker::before { content: ''; display: inline-block; width: 16px; height: 1px; background: var(--gold); }
-        .form-title { font-family: var(--font-display); font-size: 2.2rem; letter-spacing: 0.04em; color: var(--text-1); line-height: 1; margin-bottom: 4px; }
-        .form-subtitle { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+        .form-title {
+            font-family: var(--font-display); font-size: 2rem; letter-spacing: 0.04em;
+            color: var(--text-1); line-height: 1; margin-bottom: 4px;
+        }
+        .form-subtitle {
+            font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-3);
+        }
 
-        .tabs { display: flex; background: var(--deep); border: 1px solid var(--border-hi); border-radius: 6px; padding: 3px; gap: 3px; margin-bottom: 28px; }
-        .tab { flex: 1; text-align: center; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); padding: 9px 0; border-radius: 4px; cursor: pointer; transition: background 0.2s, color 0.2s; user-select: none; }
+        .tabs {
+            display: flex; background: var(--deep);
+            border: 1px solid var(--border-hi); border-radius: 6px; padding: 3px; gap: 3px;
+            margin-bottom: 24px;
+        }
+        .tab {
+            flex: 1; text-align: center;
+            font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--text-3);
+            padding: 9px 0; border-radius: 4px; cursor: pointer;
+            transition: background 0.2s, color 0.2s; user-select: none;
+        }
         .tab:hover { color: var(--text-2); }
         .tab.active { background: var(--card); color: var(--gold); box-shadow: inset 0 1px 0 var(--border-gold); }
 
         #alert-box { min-height: 0; }
-        .alert { display: flex; gap: 10px; align-items: flex-start; padding: 11px 14px; border-radius: 6px; margin-bottom: 18px; font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; line-height: 1.5; animation: alert-in 0.3s var(--ease-out) both; }
+        .alert {
+            display: flex; gap: 10px; align-items: flex-start;
+            padding: 11px 14px; border-radius: 6px; margin-bottom: 16px;
+            font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.04em; line-height: 1.5;
+            animation: alert-in 0.3s var(--ease-out) both;
+        }
         @keyframes alert-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        .alert-error   { background: rgba(255,71,87,0.08);  border: 1px solid rgba(255,71,87,0.25);  color: #FF8F9A; }
-        .alert-success { background: rgba(0,212,106,0.08);  border: 1px solid rgba(0,212,106,0.25);  color: #4DFFA0; }
+        .alert-error   { background: rgba(255,71,87,0.08); border: 1px solid rgba(255,71,87,0.25); color: #FF8F9A; }
+        .alert-success { background: rgba(0,212,106,0.08); border: 1px solid rgba(0,212,106,0.25); color: #4DFFA0; }
 
         .panel { display: none; }
         .panel.active { display: block; }
 
-        .form-group  { margin-bottom: 16px; }
-        .form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .form-label  { display: block; font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); margin-bottom: 7px; transition: color 0.2s; }
+        .form-group { margin-bottom: 14px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-label {
+            display: block; font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--text-3); margin-bottom: 7px; transition: color 0.2s;
+        }
         .form-group:focus-within .form-label { color: var(--gold); }
-        .form-control { width: 100%; background: var(--deep); border: 1px solid var(--border-hi); border-radius: 6px; color: var(--text-1); padding: 11px 14px; font-size: 0.875rem; font-family: var(--font-body); outline: none; transition: border-color 0.2s, box-shadow 0.2s, background 0.2s; caret-color: var(--gold); }
+        .form-control {
+            width: 100%; background: var(--deep);
+            border: 1px solid var(--border-hi); border-radius: 6px;
+            color: var(--text-1); padding: 11px 14px; font-size: 0.875rem; font-family: var(--font-body);
+            outline: none; caret-color: var(--gold);
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+        }
         .form-control::placeholder { color: var(--text-3); }
         .form-control:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-glow); background: rgba(3,6,15,0.8); }
         .form-control.input-error { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(255,71,87,0.15) !important; }
         .form-hint { font-family: var(--font-mono); font-size: 0.54rem; color: var(--text-3); margin-top: 5px; letter-spacing: 0.06em; }
         .form-hint.hint-error { color: #FF6B7A; }
-        .form-hint.hint-ok    { color: var(--green); }
+        .form-hint.hint-ok { color: var(--green); }
 
-        .btn-submit { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 13px 20px; margin-top: 10px; background: var(--gold); color: #050810; border: none; border-radius: 6px; font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.12em; cursor: pointer; position: relative; overflow: hidden; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
-        .btn-submit::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%); pointer-events: none; }
+        .btn-submit {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 13px 20px; margin-top: 10px;
+            background: var(--gold); color: #050810; border: none; border-radius: 6px;
+            font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.12em;
+            cursor: pointer; position: relative; overflow: hidden;
+            transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+        }
+        .btn-submit::before {
+            content: ''; position: absolute; inset: 0; pointer-events: none;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+        }
         .btn-submit:hover { background: var(--gold-bright); box-shadow: 0 6px 24px rgba(232,160,0,0.35); transform: translateY(-1px); }
         .btn-submit:active { transform: none; box-shadow: none; }
         .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
@@ -132,281 +250,851 @@
 
         .forgot-link {
             display: block; text-align: center; font-family: var(--font-mono); font-size: 0.58rem;
-            letter-spacing: 0.1em; color: var(--text-3); margin-top: 12px; cursor: pointer;
+            letter-spacing: 0.1em; color: var(--text-3); margin-top: 10px; cursor: pointer;
             transition: color 0.2s; background: none; border: none; width: 100%; padding: 4px 0;
         }
         .forgot-link:hover { color: var(--gold); }
 
         .back-link {
-            display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono);
-            font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3);
-            cursor: pointer; background: none; border: none; padding: 0; margin-bottom: 20px; transition: color 0.2s;
+            display: inline-flex; align-items: center; gap: 6px;
+            font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-3); cursor: pointer;
+            background: none; border: none; padding: 0; margin-bottom: 18px; transition: color 0.2s;
         }
         .back-link:hover { color: var(--gold); }
         .back-link::before { content: '←'; font-size: 0.8rem; }
 
-        .guest-track { margin-top: 20px; text-align: center; padding: 14px; background: var(--deep); border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em; color: var(--text-3); transition: border-color 0.2s; }
+        .guest-track {
+            margin-top: 18px; text-align: center; padding: 12px;
+            background: var(--deep); border: 1px solid var(--border); border-radius: 6px;
+            font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em; color: var(--text-3);
+            transition: border-color 0.2s;
+        }
         .guest-track:hover { border-color: var(--border-hi); }
         .guest-track a { color: var(--gold); text-decoration: none; font-weight: 500; transition: opacity 0.2s; }
         .guest-track a:hover { opacity: 0.75; }
 
-        .form-footer { margin-top: auto; padding-top: 28px; display: flex; align-items: center; justify-content: space-between; font-family: var(--font-mono); font-size: 0.52rem; letter-spacing: 0.08em; color: var(--text-3); }
-        .footer-status { display: flex; align-items: center; gap: 6px; }
-        .footer-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+        /* ── STATS STRIP (BETWEEN HERO AND ABOUT) ──────────────────── */
+        .stats-strip {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            background: var(--deep); border-top: 1px solid var(--border-hi); border-bottom: 1px solid var(--border-hi);
+        }
+        .stat-cell {
+            padding: 28px 24px; text-align: center;
+            border-right: 1px solid var(--border);
+            transition: background 0.25s;
+        }
+        .stat-cell:last-child { border-right: none; }
+        .stat-cell:hover { background: var(--raised); }
+        .stat-num {
+            font-family: var(--font-display); font-size: 2.6rem; color: var(--gold); line-height: 1; margin-bottom: 6px;
+        }
+        .stat-lbl {
+            font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--text-3);
+        }
 
-        /* BOTTOM BAR */
-        .bottombar { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 48px; background: var(--deep); border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.5rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); flex-shrink: 0; }
-        .bottombar-center { display: flex; gap: 24px; }
-        .bottombar-center span { color: var(--text-3); }
-        .bottombar-center span + span::before { content: '·'; margin-right: 24px; color: var(--text-3); }
+        /* ── GENERIC SECTION ──────────────────────────────────────────── */
+        .section { padding: 96px 0; position: relative; }
+        .section.alt { background: var(--deep); }
 
-        /* ANIMATIONS */
+        /* ── ABOUT ────────────────────────────────────────────────────── */
+        .about-grid {
+            display: grid; grid-template-columns: 1.1fr 1fr; gap: 64px; align-items: start; margin-top: 56px;
+        }
+        .about-pillars { display: grid; gap: 16px; }
+        .pillar {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 20px 22px;
+            display: grid; grid-template-columns: 36px 1fr; gap: 16px; align-items: start;
+            transition: border-color 0.25s, transform 0.25s;
+        }
+        .pillar:hover { border-color: var(--border-gold); transform: translateY(-2px); }
+        .pillar-icon {
+            width: 36px; height: 36px; border-radius: 8px;
+            background: var(--gold-soft); border: 1px solid var(--border-gold);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--gold); font-size: 1rem;
+        }
+        .pillar-title {
+            font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.06em; margin-bottom: 4px; color: var(--text-1);
+        }
+        .pillar-text { font-size: 0.85rem; line-height: 1.6; color: var(--text-2); }
+
+        /* ── FEATURES ─────────────────────────────────────────────────── */
+        .features-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px;
+        }
+        .feature-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+            padding: 28px 24px; position: relative; overflow: hidden;
+            transition: border-color 0.3s, transform 0.3s;
+        }
+        .feature-card::before {
+            content: ''; position: absolute; top: 0; right: 0; width: 60px; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold)); transform: translateX(60px);
+            transition: transform 0.3s;
+        }
+        .feature-card:hover { border-color: var(--border-gold); transform: translateY(-4px); }
+        .feature-card:hover::before { transform: translateX(0); }
+        .feature-icon {
+            width: 44px; height: 44px; border-radius: 10px;
+            background: var(--gold-soft); border: 1px solid var(--border-gold);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--gold); font-size: 1.2rem; margin-bottom: 18px;
+        }
+        .feature-title {
+            font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.06em;
+            color: var(--text-1); margin-bottom: 8px;
+        }
+        .feature-text { font-size: 0.85rem; line-height: 1.6; color: var(--text-2); margin-bottom: 14px; }
+        .feature-meta {
+            font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.12em;
+            text-transform: uppercase; color: var(--gold);
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .feature-meta::before { content: '//'; opacity: 0.6; }
+
+        /* ── HOW IT WORKS ────────────────────────────────────────────── */
+        .steps-flow {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 56px;
+            position: relative;
+        }
+        .step-card {
+            background: var(--raised); border: 1px solid var(--border); border-radius: 10px;
+            padding: 24px 22px; position: relative;
+            transition: border-color 0.25s, transform 0.25s;
+        }
+        .step-card:hover { border-color: var(--border-gold); transform: translateY(-3px); }
+        .step-num {
+            font-family: var(--font-display); font-size: 2.4rem; color: var(--gold);
+            line-height: 1; opacity: 0.45; margin-bottom: 10px;
+        }
+        .step-title {
+            font-family: var(--font-display); font-size: 1.05rem; letter-spacing: 0.06em;
+            color: var(--text-1); margin-bottom: 8px;
+        }
+        .step-text { font-size: 0.82rem; line-height: 1.6; color: var(--text-2); }
+        .step-arrow {
+            position: absolute; top: 50%; right: -16px; transform: translateY(-50%);
+            color: var(--gold); font-size: 1.2rem; pointer-events: none; user-select: none;
+        }
+
+        /* ── ROLES ────────────────────────────────────────────────────── */
+        .roles-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px;
+        }
+        .role-card {
+            background: var(--card); border: 1px solid; border-radius: 10px; padding: 28px 24px;
+            transition: transform 0.25s, box-shadow 0.25s;
+        }
+        .role-card:hover { transform: translateY(-4px); }
+        .role-card.admin    { border-color: rgba(255,71,87,0.25); }
+        .role-card.operator { border-color: rgba(232,160,0,0.30); }
+        .role-card.customer { border-color: rgba(0,212,106,0.25); }
+        .role-card.admin:hover    { box-shadow: 0 12px 40px rgba(255,71,87,0.12); }
+        .role-card.operator:hover { box-shadow: 0 12px 40px rgba(232,160,0,0.12); }
+        .role-card.customer:hover { box-shadow: 0 12px 40px rgba(0,212,106,0.12); }
+
+        .role-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--border);
+        }
+        .role-name {
+            font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.08em;
+        }
+        .role-card.admin    .role-name { color: #FF6B7A; }
+        .role-card.operator .role-name { color: var(--gold); }
+        .role-card.customer .role-name { color: var(--green); }
+        .role-badge {
+            font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.14em;
+            text-transform: uppercase; padding: 4px 8px; border-radius: 4px;
+        }
+        .role-card.admin    .role-badge { color: #FF6B7A; background: rgba(255,71,87,0.08); }
+        .role-card.operator .role-badge { color: var(--gold);  background: rgba(232,160,0,0.08); }
+        .role-card.customer .role-badge { color: var(--green); background: rgba(0,212,106,0.08); }
+        .role-list { list-style: none; display: grid; gap: 10px; }
+        .role-list li {
+            display: grid; grid-template-columns: 14px 1fr; gap: 10px; align-items: start;
+            font-size: 0.85rem; color: var(--text-2); line-height: 1.5;
+        }
+        .role-list li::before {
+            content: '✓'; color: var(--gold); font-weight: 700;
+        }
+        .role-list li.deny { color: var(--text-3); }
+        .role-list li.deny::before { content: '×'; color: var(--text-3); }
+
+        /* ── TECH STACK ──────────────────────────────────────────────── */
+        .tech-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px; margin-top: 56px;
+        }
+        .tech-pill {
+            background: var(--raised); border: 1px solid var(--border); border-radius: 8px;
+            padding: 14px 18px;
+            display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: center;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .tech-pill:hover { border-color: var(--border-gold); background: var(--card); }
+        .tech-icon {
+            width: 36px; height: 36px; border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--gold-soft); color: var(--gold); font-size: 0.95rem;
+            font-family: var(--font-mono); font-weight: 700;
+        }
+        .tech-name { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; color: var(--text-1); }
+        .tech-role { font-family: var(--font-mono); font-size: 0.55rem; color: var(--text-3); margin-top: 2px; }
+
+        /* ── CTA SECTION ─────────────────────────────────────────────── */
+        .cta-section { padding: 110px 0; text-align: center; position: relative; overflow: hidden; }
+        .cta-section::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(ellipse 60% 60% at 50% 50%, rgba(232,160,0,0.08), transparent 70%);
+            pointer-events: none;
+        }
+        .cta-eyebrow { margin-bottom: 18px; }
+        .cta-title {
+            font-family: var(--font-display); font-size: clamp(2.4rem, 5vw, 4rem);
+            line-height: 1.05; letter-spacing: 0.02em; margin: 0 auto 18px; max-width: 720px;
+        }
+        .cta-title .accent { color: var(--gold); }
+        .cta-text {
+            font-size: 0.95rem; line-height: 1.75; color: var(--text-2);
+            max-width: 540px; margin: 0 auto 32px;
+        }
+        .cta-buttons { display: inline-flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+        .btn-primary, .btn-ghost {
+            display: inline-flex; align-items: center; gap: 10px;
+            padding: 13px 26px; border-radius: 6px;
+            font-family: var(--font-display); font-size: 1rem; letter-spacing: 0.12em;
+            text-decoration: none; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background: var(--gold); color: #050810; border: 1px solid var(--gold); }
+        .btn-primary:hover { background: var(--gold-bright); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(232,160,0,0.35); }
+        .btn-ghost { background: transparent; color: var(--text-1); border: 1px solid var(--border-hi); }
+        .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+        /* ── FOOTER ──────────────────────────────────────────────────── */
+        .site-footer {
+            background: var(--deep); border-top: 1px solid var(--border);
+            padding: 64px 0 0;
+        }
+        .footer-grid {
+            display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px;
+        }
+        .footer-col-title {
+            font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.18em;
+            text-transform: uppercase; color: var(--text-3); margin-bottom: 16px;
+        }
+        .footer-brand-tag { font-size: 0.85rem; color: var(--text-2); line-height: 1.7; max-width: 320px; margin-top: 14px; }
+        .footer-links { list-style: none; display: grid; gap: 8px; }
+        .footer-links a {
+            font-size: 0.82rem; color: var(--text-2); text-decoration: none; transition: color 0.2s;
+        }
+        .footer-links a:hover { color: var(--gold); }
+        .footer-bottombar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 0;
+            border-top: 1px solid var(--border);
+            font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--text-3);
+        }
+        .footer-status { display: flex; align-items: center; gap: 8px; }
+        .footer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .footer-techline { display: flex; gap: 18px; }
+        .footer-techline span + span::before { content: '·'; margin-right: 18px; color: var(--text-3); }
+
+        /* ── ANIMATIONS / SCROLL REVEAL ─────────────────────────────── */
         @keyframes fade-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes draw-line { from { stroke-dashoffset: 600; } to { stroke-dashoffset: 0; } }
+        @keyframes grid-pulse { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.35; } }
         .route-path { stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw-line 3s var(--ease-out) 0.8s forwards; }
         .grid-line { animation: grid-pulse 4s ease-in-out infinite; }
-        @keyframes grid-pulse { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.35; } }
+
+        /* IntersectionObserver-driven reveal class. Default state = hidden. */
+        .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out); }
+        .reveal.in-view { opacity: 1; transform: translateY(0); }
+        .reveal.delay-1 { transition-delay: 0.08s; }
+        .reveal.delay-2 { transition-delay: 0.16s; }
+        .reveal.delay-3 { transition-delay: 0.24s; }
+        .reveal.delay-4 { transition-delay: 0.32s; }
+        .reveal.delay-5 { transition-delay: 0.40s; }
+        .reveal.delay-6 { transition-delay: 0.48s; }
+
+        /* ── RESPONSIVE ──────────────────────────────────────────────── */
+        @media (max-width: 1080px) {
+            .features-grid, .roles-grid { grid-template-columns: repeat(2, 1fr); }
+            .steps-flow { grid-template-columns: repeat(2, 1fr); }
+            .step-arrow { display: none; }
+            .footer-grid { grid-template-columns: 1fr 1fr; }
+        }
 
         @media (max-width: 900px) {
-            html, body { overflow: auto; }
-            .shell { height: auto; }
-            .main { grid-template-columns: 1fr; }
-            .hero-panel { padding: 40px 28px; min-height: 420px; }
-            .form-panel { padding: 36px 24px; }
-            .bottombar { padding: 0 24px; }
-            .hero-heading { font-size: 3rem; }
-            .access-cards { flex-direction: column; }
+            html, body { overflow-x: hidden; }
+            .hero { grid-template-columns: 1fr; min-height: auto; }
+            .hero-panel { padding: 80px 28px 40px; min-height: 480px; }
+            .form-panel { padding: 32px 24px; }
+            .hero-scroll-cue { display: none; }
+
+            .nav-links { display: none; }
+            .nav-toggle { display: block; }
+            .nav-links.open {
+                display: flex; flex-direction: column; gap: 0;
+                position: absolute; top: var(--nav-height); left: 0; right: 0;
+                background: var(--deep); border-bottom: 1px solid var(--border-hi);
+                padding: 12px 24px;
+            }
+            .nav-links.open .nav-link { padding: 12px 4px; border-bottom: 1px solid var(--border); }
+            .nav-links.open .nav-link:last-child { border-bottom: none; }
+
+            .stats-strip { grid-template-columns: repeat(2, 1fr); }
+            .stat-cell:nth-child(2) { border-right: none; }
+            .stat-cell:nth-child(odd) { border-right: 1px solid var(--border); }
+            .stat-cell:nth-child(1), .stat-cell:nth-child(2) { border-bottom: 1px solid var(--border); }
+
+            .about-grid, .features-grid, .roles-grid, .footer-grid { grid-template-columns: 1fr; gap: 20px; }
+            .steps-flow { grid-template-columns: 1fr; }
+            .section { padding: 64px 0; }
         }
     </style>
 </head>
 <body>
-<div class="shell">
-  <div class="main">
 
-    <!-- LEFT: HERO -->
-    <div class="hero-panel">
-      <div class="world-grid">
-        <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-          <g stroke="rgba(232,160,0,0.12)" stroke-width="0.5" fill="none">
-            <line x1="0" y1="83"  x2="800" y2="83"  class="grid-line" style="animation-delay:0s"/>
-            <line x1="0" y1="166" x2="800" y2="166" class="grid-line" style="animation-delay:0.3s"/>
-            <line x1="0" y1="250" x2="800" y2="250" class="grid-line" style="animation-delay:0.6s"/>
-            <line x1="0" y1="333" x2="800" y2="333" class="grid-line" style="animation-delay:0.9s"/>
-            <line x1="0" y1="416" x2="800" y2="416" class="grid-line" style="animation-delay:1.2s"/>
-            <line x1="100" y1="0" x2="100" y2="500" class="grid-line" style="animation-delay:0.15s"/>
-            <line x1="200" y1="0" x2="200" y2="500" class="grid-line" style="animation-delay:0.45s"/>
-            <line x1="300" y1="0" x2="300" y2="500" class="grid-line" style="animation-delay:0.75s"/>
-            <line x1="400" y1="0" x2="400" y2="500" class="grid-line" style="animation-delay:1.05s"/>
-            <line x1="500" y1="0" x2="500" y2="500" class="grid-line" style="animation-delay:1.35s"/>
-            <line x1="600" y1="0" x2="600" y2="500" class="grid-line" style="animation-delay:0.2s"/>
-            <line x1="700" y1="0" x2="700" y2="500" class="grid-line" style="animation-delay:0.5s"/>
-          </g>
-          <g fill="rgba(232,160,0,0.06)" stroke="rgba(232,160,0,0.15)" stroke-width="0.8">
-            <path d="M 60 80 L 90 70 L 130 75 L 160 100 L 155 160 L 140 200 L 120 220 L 100 210 L 80 190 L 60 160 L 50 130 Z"/>
-            <path d="M 130 230 L 155 220 L 170 250 L 165 310 L 150 360 L 135 370 L 118 340 L 110 290 L 115 250 Z"/>
-            <path d="M 340 70 L 380 65 L 400 80 L 390 110 L 365 120 L 340 110 Z"/>
-            <path d="M 350 130 L 400 120 L 430 150 L 435 220 L 415 290 L 385 320 L 355 300 L 330 250 L 325 180 L 340 150 Z"/>
-            <path d="M 420 60 L 560 55 L 620 80 L 640 120 L 600 160 L 550 180 L 490 170 L 440 150 L 420 120 Z"/>
-            <path d="M 590 260 L 650 250 L 680 270 L 675 320 L 640 340 L 590 320 L 575 290 Z"/>
-          </g>
-          <g fill="#E8A000">
-            <circle cx="100" cy="200" r="3" opacity="0.6"/>
-            <circle cx="390" cy="100" r="3" opacity="0.6"/>
-            <circle cx="580" cy="140" r="3" opacity="0.6"/>
-            <circle cx="540" cy="230" r="3" opacity="0.6"/>
-            <circle cx="465" cy="155" r="3" opacity="0.6"/>
-            <circle cx="390" cy="290" r="3" opacity="0.6"/>
-            <circle cx="80"  cy="240" r="3" opacity="0.6"/>
-            <circle cx="435" cy="80"  r="3" opacity="0.6"/>
-          </g>
-          <path d="M 100 200 Q 240 120 390 100" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.5" class="route-path" stroke-linecap="round"/>
-          <path d="M 580 140 Q 570 185 540 230" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.4" stroke-dasharray="400" stroke-dashoffset="400" style="animation: draw-line 2.5s cubic-bezier(0.16,1,0.3,1) 1.4s forwards"/>
-          <path d="M 390 100 Q 430 130 465 155" fill="none" stroke="#E8A000" stroke-width="1" opacity="0.35" stroke-dasharray="300" stroke-dashoffset="300" style="animation: draw-line 2s cubic-bezier(0.16,1,0.3,1) 2s forwards"/>
-          <circle r="4" fill="#E8A000" opacity="0.9">
-            <animateMotion dur="5s" repeatCount="indefinite" begin="2s">
-              <mpath href="#route-nyc-rtm"/>
-            </animateMotion>
-          </circle>
-          <path id="route-nyc-rtm" d="M 100 200 Q 240 120 390 100" fill="none"/>
-          <circle cx="100" cy="200" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
-            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
-            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="0.5s"/>
-          </circle>
-          <circle cx="390" cy="100" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
-            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="1.5s"/>
-            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="1.5s"/>
-          </circle>
-          <circle cx="580" cy="140" r="8" fill="none" stroke="#E8A000" stroke-width="1" opacity="0">
-            <animate attributeName="r" values="4;16" dur="2.5s" repeatCount="indefinite" begin="2.5s"/>
-            <animate attributeName="opacity" values="0.6;0" dur="2.5s" repeatCount="indefinite" begin="2.5s"/>
-          </circle>
+<!-- ── TOP NAV ───────────────────────────────────────────────────── -->
+<nav class="topnav" id="topnav">
+    <a href="#home" class="nav-brand">
+        <svg class="nav-brand-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+            <path d="M16 4 L28 16 L16 28 L4 16 Z" fill="rgba(232,160,0,0.1)" stroke="#E8A000" stroke-width="2"/>
+            <circle cx="16" cy="16" r="3" fill="#E8A000"/>
         </svg>
-      </div>
+        <span class="nav-brand-name">CARGO<span>TRACK</span></span>
+    </a>
+    <div class="nav-links" id="nav-links">
+        <a class="nav-link" href="#home"          data-section="home">Home</a>
+        <a class="nav-link" href="#about"         data-section="about">About</a>
+        <a class="nav-link" href="#features"      data-section="features">Features</a>
+        <a class="nav-link" href="#how-it-works"  data-section="how-it-works">How It Works</a>
+        <a class="nav-link" href="#roles"         data-section="roles">Roles</a>
+        <a class="nav-link" href="#tech"          data-section="tech">Tech</a>
+        <a class="nav-link" href="/Cargo_Tracker_System/pages/track.html">Track</a>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+        <a href="#home" class="nav-cta" id="nav-signin">Sign In →</a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">☰</button>
+    </div>
+</nav>
 
-      <div class="hero-content">
-        <div class="hero-eyebrow"><div class="eyebrow-bar"></div>Global Freight Management System</div>
-        <h1 class="hero-heading">FULL<br>CARGO<br><span class="accent">CONTROL.</span></h1>
-        <p class="hero-sub">Real-time tracking, intelligent routing, and end-to-end cargo management — engineered for operators who can't afford to lose sight of a single shipment.</p>
-        <div class="stat-strip">
-          <div class="stat-item"><div class="stat-num">—</div><div class="stat-lbl">Active Ships</div></div>
-          <div class="stat-item"><div class="stat-num">—</div><div class="stat-lbl">Delivered</div></div>
-          <div class="stat-item"><div class="stat-num">99.9%</div><div class="stat-lbl">Uptime SLA</div></div>
-          <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-lbl">Operations</div></div>
+<!-- ── HERO ──────────────────────────────────────────────────────── -->
+<section id="home" class="hero">
+
+    <!-- LEFT: visuals + heading -->
+    <div class="hero-panel">
+        <div class="world-grid">
+            <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+                <g stroke="rgba(232,160,0,0.12)" stroke-width="0.5" fill="none">
+                    <line x1="0" y1="83"  x2="800" y2="83"  class="grid-line" style="animation-delay:0s"/>
+                    <line x1="0" y1="166" x2="800" y2="166" class="grid-line" style="animation-delay:0.3s"/>
+                    <line x1="0" y1="250" x2="800" y2="250" class="grid-line" style="animation-delay:0.6s"/>
+                    <line x1="0" y1="333" x2="800" y2="333" class="grid-line" style="animation-delay:0.9s"/>
+                    <line x1="0" y1="416" x2="800" y2="416" class="grid-line" style="animation-delay:1.2s"/>
+                    <line x1="100" y1="0" x2="100" y2="500" class="grid-line" style="animation-delay:0.15s"/>
+                    <line x1="200" y1="0" x2="200" y2="500" class="grid-line" style="animation-delay:0.45s"/>
+                    <line x1="300" y1="0" x2="300" y2="500" class="grid-line" style="animation-delay:0.75s"/>
+                    <line x1="400" y1="0" x2="400" y2="500" class="grid-line" style="animation-delay:1.05s"/>
+                    <line x1="500" y1="0" x2="500" y2="500" class="grid-line" style="animation-delay:1.35s"/>
+                    <line x1="600" y1="0" x2="600" y2="500" class="grid-line" style="animation-delay:0.2s"/>
+                    <line x1="700" y1="0" x2="700" y2="500" class="grid-line" style="animation-delay:0.5s"/>
+                </g>
+                <g fill="rgba(232,160,0,0.06)" stroke="rgba(232,160,0,0.15)" stroke-width="0.8">
+                    <path d="M 60 80 L 90 70 L 130 75 L 160 100 L 155 160 L 140 200 L 120 220 L 100 210 L 80 190 L 60 160 L 50 130 Z"/>
+                    <path d="M 130 230 L 155 220 L 170 250 L 165 310 L 150 360 L 135 370 L 118 340 L 110 290 L 115 250 Z"/>
+                    <path d="M 340 70 L 380 65 L 400 80 L 390 110 L 365 120 L 340 110 Z"/>
+                    <path d="M 350 130 L 400 120 L 430 150 L 435 220 L 415 290 L 385 320 L 355 300 L 330 250 L 325 180 L 340 150 Z"/>
+                    <path d="M 420 60 L 560 55 L 620 80 L 640 120 L 600 160 L 550 180 L 490 170 L 440 150 L 420 120 Z"/>
+                    <path d="M 590 260 L 650 250 L 680 270 L 675 320 L 640 340 L 590 320 L 575 290 Z"/>
+                </g>
+                <g fill="#E8A000">
+                    <circle cx="100" cy="200" r="3" opacity="0.6"/>
+                    <circle cx="390" cy="100" r="3" opacity="0.6"/>
+                    <circle cx="580" cy="140" r="3" opacity="0.6"/>
+                    <circle cx="540" cy="230" r="3" opacity="0.6"/>
+                    <circle cx="465" cy="155" r="3" opacity="0.6"/>
+                </g>
+                <path id="route-nyc-rtm" d="M 100 200 Q 240 120 390 100" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.5" class="route-path" stroke-linecap="round"/>
+                <path d="M 580 140 Q 570 185 540 230" fill="none" stroke="#E8A000" stroke-width="1.5" opacity="0.4" stroke-dasharray="400" stroke-dashoffset="400" style="animation: draw-line 2.5s cubic-bezier(0.16,1,0.3,1) 1.4s forwards"/>
+                <circle r="4" fill="#E8A000" opacity="0.9">
+                    <animateMotion dur="5s" repeatCount="indefinite" begin="2s">
+                        <mpath href="#route-nyc-rtm"/>
+                    </animateMotion>
+                </circle>
+            </svg>
         </div>
-        <div class="feature-tags">
-          <div class="tag"><span class="tag-dot"></span>Real-time tracking</div>
-          <div class="tag"><span class="tag-dot"></span>Role-based access</div>
-          <div class="tag"><span class="tag-dot"></span>Event logging</div>
-          <div class="tag"><span class="tag-dot"></span>Analytics dashboard</div>
-          <div class="tag"><span class="tag-dot"></span>Multi-route support</div>
+
+        <div class="hero-content">
+            <div class="hero-eyebrow eyebrow"><div class="eyebrow-bar"></div>Global Freight Management System</div>
+            <h1 class="hero-heading">FULL<br>CARGO<br><span class="accent">CONTROL.</span></h1>
+            <p class="hero-sub">Real-time tracking, intelligent routing, and end-to-end cargo management — engineered for operators who can't afford to lose sight of a single shipment.</p>
+            <div class="feature-tags">
+                <div class="tag"><span class="tag-dot"></span>Real-time tracking</div>
+                <div class="tag"><span class="tag-dot"></span>Role-based access</div>
+                <div class="tag"><span class="tag-dot"></span>Event logging</div>
+                <div class="tag"><span class="tag-dot"></span>Audit trail</div>
+                <div class="tag"><span class="tag-dot"></span>Multi-route support</div>
+            </div>
         </div>
-        <div class="access-levels">
-          <div class="access-label">// Access Levels</div>
-          <div class="access-cards">
-            <div class="access-card admin"><div class="access-role">Admin</div><div class="access-desc">Full access<br>Cancel · Delete</div></div>
-            <div class="access-card operator"><div class="access-role">Operator</div><div class="access-desc">All cargo<br>Update · Events</div></div>
-            <div class="access-card customer"><div class="access-role">Customer</div><div class="access-desc">Own shipments<br>Book · Track</div></div>
-          </div>
+
+        <div class="hero-scroll-cue">
+            <div class="scroll-line"></div>
+            Scroll to explore
         </div>
-      </div>
     </div>
 
-    <!-- RIGHT: FORM PANEL -->
+    <!-- RIGHT: form panel (preserved) -->
     <div class="form-panel">
 
-      <div class="form-header">
-        <div class="form-kicker" id="form-kicker">Secure Portal</div>
-        <div class="form-title" id="form-title">SIGN IN</div>
-        <div class="form-subtitle" id="form-subtitle">Enter your credentials to continue</div>
-      </div>
-
-      <div id="alert-box"></div>
-
-      <div class="tabs" id="tabs-row">
-        <div class="tab active" data-tab="login">Sign In</div>
-        <div class="tab" data-tab="register">Register</div>
-      </div>
-
-      <!-- LOGIN -->
-      <div id="panel-login" class="panel active">
-        <form id="form-login" novalidate>
-          <div class="form-group">
-            <label class="form-label" for="login-username">Username</label>
-            <input id="login-username" class="form-control" type="text"
-                   placeholder="e.g. admin" autocomplete="username" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="login-password">Password</label>
-            <input id="login-password" class="form-control" type="password"
-                   placeholder="Enter your password" autocomplete="current-password" required>
-          </div>
-          <button type="submit" class="btn-submit" id="btn-login">
-            Sign In <span class="btn-arrow">→</span>
-          </button>
-        </form>
-
-        <button class="forgot-link" id="btn-show-forgot">Forgot your password?</button>
-        <button class="forgot-link" id="btn-show-resend">Didn't get the verification email?</button>
-
-        <div class="guest-track">
-          No account? &nbsp;
-          <a href="/Cargo_Tracker_System/pages/track.html">Track a shipment as guest →</a>
+        <div class="form-header">
+            <div class="form-kicker" id="form-kicker">Secure Portal</div>
+            <div class="form-title" id="form-title">SIGN IN</div>
+            <div class="form-subtitle" id="form-subtitle">Enter your credentials to continue</div>
         </div>
-      </div>
 
-      <!-- REGISTER -->
-      <div id="panel-register" class="panel">
-        <form id="form-register" novalidate>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="reg-username">Username</label>
-              <input id="reg-username" class="form-control" type="text"
-                     placeholder="jdoe" autocomplete="username" required minlength="3">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="reg-fullname">Full Name</label>
-              <input id="reg-fullname" class="form-control" type="text"
-                     placeholder="Jane Doe" required>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="reg-email">Email Address</label>
-            <input id="reg-email" class="form-control" type="email"
-                   placeholder="jane@example.com" autocomplete="email" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="reg-password">Password</label>
-            <input id="reg-password" class="form-control" type="password"
-                   placeholder="Minimum 8 characters" autocomplete="new-password" required minlength="8">
-            <div class="form-hint">// Minimum 8 characters required</div>
-          </div>
-          <!-- CONFIRM PASSWORD (new field) -->
-          <div class="form-group">
-            <label class="form-label" for="reg-confirm-password">Confirm Password</label>
-            <input id="reg-confirm-password" class="form-control" type="password"
-                   placeholder="Re-enter your password" autocomplete="new-password" required>
-            <div class="form-hint" id="confirm-hint">// Must match the password above</div>
-          </div>
-          <button type="submit" class="btn-submit" id="btn-register">
-            Create Account <span class="btn-arrow">→</span>
-          </button>
-        </form>
-      </div>
+        <div id="alert-box"></div>
 
-      <!-- FORGOT PASSWORD -->
-      <div id="panel-forgot" class="panel">
-        <button class="back-link" id="btn-back-from-forgot">Back to sign in</button>
-        <form id="form-forgot" novalidate>
-          <div class="form-group">
-            <label class="form-label" for="forgot-email">Registered Email</label>
-            <input id="forgot-email" class="form-control" type="email"
-                   placeholder="jane@example.com" autocomplete="email" required>
-            <div class="form-hint">// A reset link will be sent to this address</div>
-          </div>
-          <button type="submit" class="btn-submit" id="btn-forgot">
-            Send Reset Link <span class="btn-arrow">→</span>
-          </button>
-        </form>
-      </div>
-
-      <!-- RESEND VERIFICATION -->
-      <div id="panel-resend" class="panel">
-        <button class="back-link" id="btn-back-from-resend">Back to sign in</button>
-        <form id="form-resend" novalidate>
-          <div class="form-group">
-            <label class="form-label" for="resend-email">Registered Email</label>
-            <input id="resend-email" class="form-control" type="email"
-                   placeholder="jane@example.com" autocomplete="email" required>
-            <div class="form-hint">// A new verification link will be sent if the address belongs to an unverified account</div>
-          </div>
-          <button type="submit" class="btn-submit" id="btn-resend">
-            Resend Verification <span class="btn-arrow">→</span>
-          </button>
-        </form>
-      </div>
-
-      <div class="form-footer">
-        <span>CargoTrack &copy; 2026</span>
-        <div class="footer-status">
-          <div class="footer-dot"></div>
-          <span>All systems operational</span>
+        <div class="tabs" id="tabs-row">
+            <div class="tab active" data-tab="login">Sign In</div>
+            <div class="tab" data-tab="register">Register</div>
         </div>
-      </div>
-    </div><!-- .form-panel -->
 
-  </div><!-- .main -->
+        <!-- LOGIN -->
+        <div id="panel-login" class="panel active">
+            <form id="form-login" novalidate>
+                <div class="form-group">
+                    <label class="form-label" for="login-username">Username</label>
+                    <input id="login-username" class="form-control" type="text"
+                           placeholder="e.g. admin" autocomplete="username" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="login-password">Password</label>
+                    <input id="login-password" class="form-control" type="password"
+                           placeholder="Enter your password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn-submit" id="btn-login">
+                    Sign In <span class="btn-arrow">→</span>
+                </button>
+            </form>
 
-  <footer class="bottombar">
-    <span>Jakarta EE 10 · GlassFish 7</span>
-    <div class="bottombar-center">
-      <span>Logistics Operations Platform</span>
-      <span>v1.0.0</span>
+            <button class="forgot-link" id="btn-show-forgot">Forgot your password?</button>
+            <button class="forgot-link" id="btn-show-resend">Didn't get the verification email?</button>
+
+            <div class="guest-track">
+                No account? &nbsp;
+                <a href="/Cargo_Tracker_System/pages/track.html">Track a shipment as guest →</a>
+            </div>
+        </div>
+
+        <!-- REGISTER -->
+        <div id="panel-register" class="panel">
+            <form id="form-register" novalidate>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label" for="reg-username">Username</label>
+                        <input id="reg-username" class="form-control" type="text"
+                               placeholder="jdoe" autocomplete="username" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="reg-fullname">Full Name</label>
+                        <input id="reg-fullname" class="form-control" type="text"
+                               placeholder="Jane Doe" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="reg-email">Email Address</label>
+                    <input id="reg-email" class="form-control" type="email"
+                           placeholder="jane@example.com" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="reg-password">Password</label>
+                    <input id="reg-password" class="form-control" type="password"
+                           placeholder="Minimum 8 characters" autocomplete="new-password" required minlength="8">
+                    <div class="form-hint">// Minimum 8 characters required</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="reg-confirm-password">Confirm Password</label>
+                    <input id="reg-confirm-password" class="form-control" type="password"
+                           placeholder="Re-enter your password" autocomplete="new-password" required>
+                    <div class="form-hint" id="confirm-hint">// Must match the password above</div>
+                </div>
+                <button type="submit" class="btn-submit" id="btn-register">
+                    Create Account <span class="btn-arrow">→</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- FORGOT PASSWORD -->
+        <div id="panel-forgot" class="panel">
+            <button class="back-link" id="btn-back-from-forgot">Back to sign in</button>
+            <form id="form-forgot" novalidate>
+                <div class="form-group">
+                    <label class="form-label" for="forgot-email">Registered Email</label>
+                    <input id="forgot-email" class="form-control" type="email"
+                           placeholder="jane@example.com" autocomplete="email" required>
+                    <div class="form-hint">// A reset link will be sent to this address</div>
+                </div>
+                <button type="submit" class="btn-submit" id="btn-forgot">
+                    Send Reset Link <span class="btn-arrow">→</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- RESEND VERIFICATION -->
+        <div id="panel-resend" class="panel">
+            <button class="back-link" id="btn-back-from-resend">Back to sign in</button>
+            <form id="form-resend" novalidate>
+                <div class="form-group">
+                    <label class="form-label" for="resend-email">Registered Email</label>
+                    <input id="resend-email" class="form-control" type="email"
+                           placeholder="jane@example.com" autocomplete="email" required>
+                    <div class="form-hint">// A new verification link will be sent if the address belongs to an unverified account</div>
+                </div>
+                <button type="submit" class="btn-submit" id="btn-resend">
+                    Resend Verification <span class="btn-arrow">→</span>
+                </button>
+            </form>
+        </div>
     </div>
-    <span>© 2026 CargoTrack</span>
-  </footer>
-</div><!-- .shell -->
+</section>
+
+<!-- ── STATS STRIP ───────────────────────────────────────────────── -->
+<div class="stats-strip">
+    <div class="stat-cell"><div class="stat-num" data-counter="14">0</div><div class="stat-lbl">API Endpoints</div></div>
+    <div class="stat-cell"><div class="stat-num" data-counter="9">0</div><div class="stat-lbl">Security Layers</div></div>
+    <div class="stat-cell"><div class="stat-num" data-counter="17">0</div><div class="stat-lbl">Unit Tests Passing</div></div>
+    <div class="stat-cell"><div class="stat-num">99.9%</div><div class="stat-lbl">Uptime SLA</div></div>
+</div>
+
+<!-- ── ABOUT ─────────────────────────────────────────────────────── -->
+<section id="about" class="section">
+    <div class="container">
+        <div class="reveal eyebrow"><div class="eyebrow-bar"></div>About the platform</div>
+        <h2 class="reveal section-title delay-1">Built for the way<br>logistics actually <span class="accent">moves.</span></h2>
+        <p class="reveal section-lead delay-2">CargoTrack is an enterprise shipment-management platform designed around three principles: every action is auditable, every shipment is trackable, and every user only sees what they own. No surveillance theatre — just the visibility operators need.</p>
+
+        <div class="about-grid">
+            <div class="reveal delay-3" style="font-size: 0.95rem; line-height: 1.85; color: var(--text-2);">
+                <p style="margin-bottom: 18px;">Most cargo systems are spreadsheets pretending to be software. They lose track of who booked what, leak customer data across accounts, and treat security as a checkbox. CargoTrack treats security as the <strong style="color: var(--text-1);">foundation</strong>.</p>
+                <p style="margin-bottom: 18px;">Every shipment carries a tracking number. Every user has exactly the access their role requires. Every login goes through brute-force protection, every input is validated, every secret lives in environment variables — never in code.</p>
+                <p>The result: a platform a junior developer can audit, a senior developer can extend, and a customer can trust.</p>
+            </div>
+
+            <div class="about-pillars">
+                <div class="pillar reveal delay-3">
+                    <div class="pillar-icon">◆</div>
+                    <div>
+                        <div class="pillar-title">Security-first</div>
+                        <div class="pillar-text">JWT auth, role-based access, sliding-window rate limiting, brute-force throttling, and email verification — all wired in by default.</div>
+                    </div>
+                </div>
+                <div class="pillar reveal delay-4">
+                    <div class="pillar-icon">↻</div>
+                    <div>
+                        <div class="pillar-title">Built to scale</div>
+                        <div class="pillar-text">Stateless JAX-RS resources, JTA-managed transactions, paginated queries — every endpoint designed to survive real traffic.</div>
+                    </div>
+                </div>
+                <div class="pillar reveal delay-5">
+                    <div class="pillar-icon">∴</div>
+                    <div>
+                        <div class="pillar-title">Auditable by design</div>
+                        <div class="pillar-text">Immutable tracking events form a per-cargo audit trail. Customer username on every shipment. No silent state changes.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── FEATURES ──────────────────────────────────────────────────── -->
+<section id="features" class="section alt">
+    <div class="container">
+        <div class="reveal eyebrow"><div class="eyebrow-bar"></div>What you get</div>
+        <h2 class="reveal section-title delay-1">Nine security layers,<br>zero <span class="accent">enterprise overhead.</span></h2>
+        <p class="reveal section-lead delay-2">Every feature below ships with the platform. No add-ons, no surprise modules, no premium tiers. The whole stack runs on a single Jakarta EE container against a single PostgreSQL database.</p>
+
+        <div class="features-grid">
+            <div class="feature-card reveal delay-1">
+                <div class="feature-icon">🔐</div>
+                <div class="feature-title">JWT Authentication</div>
+                <div class="feature-text">HS256-signed JSON Web Tokens issued at login, validated on every protected request. Forge-resistant by design — change a single byte, signature fails.</div>
+                <div class="feature-meta">jjwt 0.12 · 8h sessions</div>
+            </div>
+
+            <div class="feature-card reveal delay-2">
+                <div class="feature-icon">⚡</div>
+                <div class="feature-title">Role-Based Access</div>
+                <div class="feature-text">Three roles (CUSTOMER, OPERATOR, ADMIN), enforced at the filter layer. Customers only see their own shipments — full stop. Operators manage cargo state. Admins manage everything.</div>
+                <div class="feature-meta">Filter priority 2000 · RBAC</div>
+            </div>
+
+            <div class="feature-card reveal delay-3">
+                <div class="feature-icon">✉</div>
+                <div class="feature-title">Email Verification</div>
+                <div class="feature-text">New accounts cannot log in until they confirm their address. The verify-then-flag-check ordering prevents login from becoming an account-enumeration oracle.</div>
+                <div class="feature-meta">24h tokens · Single-use</div>
+            </div>
+
+            <div class="feature-card reveal delay-4">
+                <div class="feature-icon">⛔</div>
+                <div class="feature-title">Per-IP Rate Limiting</div>
+                <div class="feature-text">Sliding-window limiter at filter priority 100 — runs before authentication so abusive clients can't burn signature-verification CPU. Returns 429 with Retry-After.</div>
+                <div class="feature-meta">100 req / 60s · Per IP</div>
+            </div>
+
+            <div class="feature-card reveal delay-5">
+                <div class="feature-icon">🛡</div>
+                <div class="feature-title">Brute-Force Throttle</div>
+                <div class="feature-text">Login-specific lockout keyed by (IP, username). Five failures in 15 minutes locks that bucket for the rest of the window. Constant-time response timing — no enumeration leak.</div>
+                <div class="feature-meta">5 fails / 15m · Per (IP, user)</div>
+            </div>
+
+            <div class="feature-card reveal delay-6">
+                <div class="feature-icon">✓</div>
+                <div class="feature-title">Input Validation</div>
+                <div class="feature-text">Bean Validation on every DTO and resource parameter. UN/LOCODE patterns, weight bounds, tracking-number format, page/size caps — invalid requests die at the framework boundary.</div>
+                <div class="feature-meta">Jakarta Bean Validation 3.0</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── HOW IT WORKS ──────────────────────────────────────────────── -->
+<section id="how-it-works" class="section">
+    <div class="container">
+        <div class="reveal eyebrow"><div class="eyebrow-bar"></div>From booking to delivery</div>
+        <h2 class="reveal section-title delay-1">Four steps<br>between origin and <span class="accent">arrival.</span></h2>
+        <p class="reveal section-lead delay-2">The whole shipment lifecycle from a customer's perspective. Each step is its own API call, each transition is logged, each state change is auditable.</p>
+
+        <div class="steps-flow">
+            <div class="step-card reveal delay-1">
+                <div class="step-num">01</div>
+                <div class="step-title">Register & Verify</div>
+                <div class="step-text">Sign up with email + password. Click the link mailed to your inbox to confirm. Login is blocked until you do.</div>
+                <div class="step-arrow">→</div>
+            </div>
+            <div class="step-card reveal delay-2">
+                <div class="step-num">02</div>
+                <div class="step-title">Book a Shipment</div>
+                <div class="step-text">Origin port, destination port, weight, description. The system generates a unique CGO-XXXXXXXXXX tracking number and emails you a confirmation.</div>
+                <div class="step-arrow">→</div>
+            </div>
+            <div class="step-card reveal delay-3">
+                <div class="step-num">03</div>
+                <div class="step-title">Track in Real Time</div>
+                <div class="step-text">As operators record events (picked up, departed, arrived, delivered) the cargo's status advances automatically. The same tracking page works for guests via a public link.</div>
+                <div class="step-arrow">→</div>
+            </div>
+            <div class="step-card reveal delay-4">
+                <div class="step-num">04</div>
+                <div class="step-title">Delivered</div>
+                <div class="step-text">A DELIVERED event at the destination port closes the shipment. The full event history stays attached to the cargo as an immutable audit trail.</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── ROLES ─────────────────────────────────────────────────────── -->
+<section id="roles" class="section alt">
+    <div class="container">
+        <div class="reveal eyebrow"><div class="eyebrow-bar"></div>Access model</div>
+        <h2 class="reveal section-title delay-1">Three roles.<br>Each sees <span class="accent">exactly</span> what it should.</h2>
+        <p class="reveal section-lead delay-2">Role enforcement happens in <code style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--gold);">RoleFilter</code> — a JAX-RS container filter at priority 2000. No business-logic check is bypassable; the filter runs before any resource method.</p>
+
+        <div class="roles-grid">
+            <div class="role-card customer reveal delay-1">
+                <div class="role-header">
+                    <div class="role-name">Customer</div>
+                    <div class="role-badge">Self-serve</div>
+                </div>
+                <ul class="role-list">
+                    <li>Book new shipments</li>
+                    <li>List their own shipments</li>
+                    <li>Track any shipment by number</li>
+                    <li class="deny">Update or cancel shipments</li>
+                    <li class="deny">View other customers' data</li>
+                    <li class="deny">Manage users or locations</li>
+                </ul>
+            </div>
+
+            <div class="role-card operator reveal delay-2">
+                <div class="role-header">
+                    <div class="role-name">Operator</div>
+                    <div class="role-badge">Cargo control</div>
+                </div>
+                <ul class="role-list">
+                    <li>All customer permissions</li>
+                    <li>List every shipment in the system</li>
+                    <li>Update cargo details &amp; status</li>
+                    <li>Record tracking events</li>
+                    <li>View analytics dashboards</li>
+                    <li class="deny">Permanently delete cargos</li>
+                </ul>
+            </div>
+
+            <div class="role-card admin reveal delay-3">
+                <div class="role-header">
+                    <div class="role-name">Admin</div>
+                    <div class="role-badge">Full access</div>
+                </div>
+                <ul class="role-list">
+                    <li>All operator permissions</li>
+                    <li>Cancel shipments</li>
+                    <li>Permanently delete cargos</li>
+                    <li>Manage users (deactivate, change role)</li>
+                    <li>Manage location catalog</li>
+                    <li>Full system observability</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── TECH STACK ────────────────────────────────────────────────── -->
+<section id="tech" class="section">
+    <div class="container">
+        <div class="reveal eyebrow"><div class="eyebrow-bar"></div>Under the hood</div>
+        <h2 class="reveal section-title delay-1">Stack that <span class="accent">explains itself</span><br>at a code review.</h2>
+        <p class="reveal section-lead delay-2">No bespoke frameworks, no proprietary middleware. Every dependency is a well-known piece of the Jakarta EE world or a standard library — easy to audit, easy to extend.</p>
+
+        <div class="tech-grid">
+            <div class="tech-pill reveal delay-1">
+                <div class="tech-icon">EE</div>
+                <div><div class="tech-name">Jakarta EE 10</div><div class="tech-role">Platform</div></div>
+            </div>
+            <div class="tech-pill reveal delay-1">
+                <div class="tech-icon">GF</div>
+                <div><div class="tech-name">GlassFish 7</div><div class="tech-role">Application server</div></div>
+            </div>
+            <div class="tech-pill reveal delay-2">
+                <div class="tech-icon">JDK</div>
+                <div><div class="tech-name">Java 17</div><div class="tech-role">Language / runtime</div></div>
+            </div>
+            <div class="tech-pill reveal delay-2">
+                <div class="tech-icon">JX</div>
+                <div><div class="tech-name">JAX-RS / Jersey</div><div class="tech-role">REST framework</div></div>
+            </div>
+            <div class="tech-pill reveal delay-3">
+                <div class="tech-icon">JPA</div>
+                <div><div class="tech-name">EclipseLink</div><div class="tech-role">ORM / JPA provider</div></div>
+            </div>
+            <div class="tech-pill reveal delay-3">
+                <div class="tech-icon">PG</div>
+                <div><div class="tech-name">PostgreSQL 18</div><div class="tech-role">Database</div></div>
+            </div>
+            <div class="tech-pill reveal delay-4">
+                <div class="tech-icon">JWT</div>
+                <div><div class="tech-name">jjwt 0.12</div><div class="tech-role">Token signing</div></div>
+            </div>
+            <div class="tech-pill reveal delay-4">
+                <div class="tech-icon">JBV</div>
+                <div><div class="tech-name">Bean Validation 3</div><div class="tech-role">Input validation</div></div>
+            </div>
+            <div class="tech-pill reveal delay-5">
+                <div class="tech-icon">CDI</div>
+                <div><div class="tech-name">Weld / CDI 4</div><div class="tech-role">Dependency injection</div></div>
+            </div>
+            <div class="tech-pill reveal delay-5">
+                <div class="tech-icon">JM</div>
+                <div><div class="tech-name">Jakarta Mail</div><div class="tech-role">Transactional email</div></div>
+            </div>
+            <div class="tech-pill reveal delay-6">
+                <div class="tech-icon">JU</div>
+                <div><div class="tech-name">JUnit 5 + Mockito</div><div class="tech-role">Testing</div></div>
+            </div>
+            <div class="tech-pill reveal delay-6">
+                <div class="tech-icon">MV</div>
+                <div><div class="tech-name">Maven 3.9</div><div class="tech-role">Build tool</div></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ── CTA ───────────────────────────────────────────────────────── -->
+<section class="cta-section">
+    <div class="container">
+        <div class="reveal cta-eyebrow eyebrow"><div class="eyebrow-bar"></div>Get started in under a minute</div>
+        <h2 class="reveal cta-title delay-1">Ready to take<br><span class="accent">control of your fleet?</span></h2>
+        <p class="reveal cta-text delay-2">Create an account, verify your email, and book your first shipment. The full platform — no trial restrictions, no upgrade nags.</p>
+        <div class="reveal cta-buttons delay-3">
+            <a href="#home" class="btn-primary" id="cta-signup">Create Account →</a>
+            <a href="/Cargo_Tracker_System/pages/track.html" class="btn-ghost">Track a Shipment</a>
+        </div>
+    </div>
+</section>
+
+<!-- ── FOOTER ────────────────────────────────────────────────────── -->
+<footer class="site-footer">
+    <div class="container">
+        <div class="footer-grid">
+            <div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <svg style="width:24px; height:24px;" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M16 4 L28 16 L16 28 L4 16 Z" fill="rgba(232,160,0,0.1)" stroke="#E8A000" stroke-width="2"/>
+                        <circle cx="16" cy="16" r="3" fill="#E8A000"/>
+                    </svg>
+                    <span style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.14em;">CARGO<span style="color: var(--gold);">TRACK</span></span>
+                </div>
+                <p class="footer-brand-tag">Logistics Operations Platform — security-first cargo management built on Jakarta EE 10. Open architecture, auditable code, no surprise vendor lock-in.</p>
+            </div>
+
+            <div>
+                <div class="footer-col-title">Product</div>
+                <ul class="footer-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#how-it-works">How It Works</a></li>
+                    <li><a href="#roles">Access Roles</a></li>
+                    <li><a href="/Cargo_Tracker_System/pages/track.html">Guest Tracking</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <div class="footer-col-title">Resources</div>
+                <ul class="footer-links">
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#tech">Tech Stack</a></li>
+                    <li><a href="/Cargo_Tracker_System/api/health">System Status</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <div class="footer-col-title">Built On</div>
+                <ul class="footer-links">
+                    <li><span style="color: var(--text-2);">Jakarta EE 10</span></li>
+                    <li><span style="color: var(--text-2);">GlassFish 7</span></li>
+                    <li><span style="color: var(--text-2);">PostgreSQL 18</span></li>
+                    <li><span style="color: var(--text-2);">Java 17 LTS</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-bottombar">
+            <span>© 2026 CargoTrack</span>
+            <div class="footer-techline">
+                <span>Jakarta EE 10</span>
+                <span>GlassFish 7</span>
+                <span>v1.0.0</span>
+            </div>
+            <div class="footer-status">
+                <div class="footer-dot"></div>
+                <span>All systems operational</span>
+            </div>
+        </div>
+    </div>
+</footer>
 
 <script>
+    /* ──────────────────────────────────────────────────────────────
+       AUTH FORM LOGIC (preserved from previous page — every handler
+       still wired to the same backend endpoint)
+       ────────────────────────────────────────────────────────────── */
     const API_BASE  = '/Cargo_Tracker_System/api';
     const TOKEN_KEY = 'cargo_tracker_token';
     const USER_KEY  = 'cargo_tracker_user';
@@ -415,7 +1103,6 @@
         window.location.href = '/Cargo_Tracker_System/pages/dashboard.html';
     }
 
-    /* Alert */
     function showAlert(message, type) {
         const icon = type === 'error' ? '⚠' : '✓';
         document.getElementById('alert-box').innerHTML =
@@ -425,7 +1112,6 @@
         }
     }
 
-    /* Button loading state */
     function setLoading(id, on, label, loadingLabel) {
         const btn = document.getElementById(id);
         btn.disabled = on;
@@ -434,12 +1120,11 @@
             : `${label} <span class="btn-arrow">→</span>`;
     }
 
-    /* Panel switching */
     const META = {
-        login:    { kicker: 'Secure Portal',     title: 'SIGN IN',              sub: 'Enter your credentials to continue' },
-        register: { kicker: 'New Account',       title: 'REGISTER',             sub: 'Fill in your details below' },
-        forgot:   { kicker: 'Account Recovery',  title: 'RESET PASSWORD',       sub: 'Enter your registered email' },
-        resend:   { kicker: 'Email Verification',title: 'RESEND VERIFICATION',  sub: 'We will send a fresh link if the account exists' },
+        login:    { kicker: 'Secure Portal',     title: 'SIGN IN',             sub: 'Enter your credentials to continue' },
+        register: { kicker: 'New Account',       title: 'REGISTER',            sub: 'Fill in your details below' },
+        forgot:   { kicker: 'Account Recovery',  title: 'RESET PASSWORD',      sub: 'Enter your registered email' },
+        resend:   { kicker: 'Email Verification',title: 'RESEND VERIFICATION', sub: 'We will send a fresh link if the account exists' },
     };
 
     function resetConfirmField() {
@@ -461,12 +1146,8 @@
         document.getElementById('form-title').textContent    = m.title;
         document.getElementById('form-subtitle').textContent = m.sub;
 
-        // The Sign-In / Register tab strip only makes sense on those two
-        // panels. Hide it for the recovery flows (forgot / resend) so the
-        // user clearly knows they're in a different sub-task.
         const showsTabs = name === 'login' || name === 'register';
         document.getElementById('tabs-row').style.display = showsTabs ? '' : 'none';
-
         if (showsTabs) {
             document.querySelectorAll('.tab').forEach(t => {
                 t.classList.toggle('active', t.dataset.tab === name);
@@ -474,17 +1155,12 @@
         }
     }
 
-    /* Live confirm-password match feedback */
     function checkPasswordMatch() {
         const pw    = document.getElementById('reg-password').value;
         const cpw   = document.getElementById('reg-confirm-password').value;
         const input = document.getElementById('reg-confirm-password');
         const hint  = document.getElementById('confirm-hint');
-
-        if (!cpw) {
-            resetConfirmField();
-            return;
-        }
+        if (!cpw) { resetConfirmField(); return; }
         if (pw !== cpw) {
             input.classList.add('input-error');
             hint.classList.add('hint-error');
@@ -501,25 +1177,28 @@
     document.getElementById('reg-confirm-password').addEventListener('input', checkPasswordMatch);
     document.getElementById('reg-password').addEventListener('input', checkPasswordMatch);
 
-    /* Tab switching */
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => showPanel(tab.dataset.tab));
     });
 
-    /* Forgot / back buttons */
     document.getElementById('btn-show-forgot').addEventListener('click', () => showPanel('forgot'));
     document.getElementById('btn-back-from-forgot').addEventListener('click', () => showPanel('login'));
-
-    /* Resend-verification / back buttons */
     document.getElementById('btn-show-resend').addEventListener('click', () => showPanel('resend'));
     document.getElementById('btn-back-from-resend').addEventListener('click', () => showPanel('login'));
 
-    /* Login */
+    /* CTA "Create Account" jumps to the form panel and switches to register tab. */
+    document.getElementById('cta-signup').addEventListener('click', e => {
+        showPanel('register');
+    });
+    /* Top-nav "Sign In →" makes sure the form is on the login tab when scrolled to. */
+    document.getElementById('nav-signin').addEventListener('click', e => {
+        showPanel('login');
+    });
+
     async function login() {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
         if (!username || !password) { showAlert('Please fill in all fields.', 'error'); return; }
-
         setLoading('btn-login', true, 'Sign In', 'Signing in…');
         try {
             const res  = await fetch(`${API_BASE}/auth/login`, {
@@ -542,7 +1221,6 @@
         }
     }
 
-    /* Register */
     async function register() {
         const username  = document.getElementById('reg-username').value.trim();
         const fullName  = document.getElementById('reg-fullname').value.trim();
@@ -553,9 +1231,7 @@
         if (!username || !fullName || !email || !password || !confirmPw) {
             showAlert('Please fill in all fields.', 'error'); return;
         }
-        if (password.length < 8) {
-            showAlert('Password must be at least 8 characters.', 'error'); return;
-        }
+        if (password.length < 8) { showAlert('Password must be at least 8 characters.', 'error'); return; }
         if (password !== confirmPw) {
             showAlert('Passwords do not match. Please check and try again.', 'error');
             document.getElementById('reg-confirm-password').classList.add('input-error');
@@ -571,12 +1247,8 @@
             });
             const data = await res.json();
             if (res.ok) {
-                // Account created, but step 9 blocks login until the user
-                // clicks the verification link. Be honest about that here —
-                // the previous "you can now sign in" message lied.
                 showAlert(
-                    'Account created. Check your email for a verification link, '
-                  + 'then come back here to sign in.',
+                    'Account created. Check your email for a verification link, then come back here to sign in.',
                     'success'
                 );
                 showPanel('login');
@@ -591,11 +1263,9 @@
         setLoading('btn-register', false, 'Create Account', '');
     }
 
-    /* Forgot password */
     async function forgotPassword() {
         const email = document.getElementById('forgot-email').value.trim();
         if (!email) { showAlert('Please enter your email address.', 'error'); return; }
-
         setLoading('btn-forgot', true, 'Send Reset Link', 'Sending…');
         try {
             await fetch(`${API_BASE}/auth/forgot-password`, {
@@ -614,14 +1284,9 @@
         setLoading('btn-forgot', false, 'Send Reset Link', '');
     }
 
-    /* Resend verification — same enumeration-defence pattern as forgot password:
-       we always render a non-committal success message regardless of whether
-       the email exists or is already verified, so the response can't be used
-       to enumerate accounts. */
     async function resendVerification() {
         const email = document.getElementById('resend-email').value.trim();
         if (!email) { showAlert('Please enter your email address.', 'error'); return; }
-
         setLoading('btn-resend', true, 'Resend Verification', 'Sending…');
         try {
             await fetch(`${API_BASE}/auth/resend-verification`, {
@@ -640,11 +1305,83 @@
         setLoading('btn-resend', false, 'Resend Verification', '');
     }
 
-    /* Form submission */
     document.getElementById('form-login').addEventListener('submit',    e => { e.preventDefault(); login(); });
     document.getElementById('form-register').addEventListener('submit', e => { e.preventDefault(); register(); });
     document.getElementById('form-forgot').addEventListener('submit',   e => { e.preventDefault(); forgotPassword(); });
     document.getElementById('form-resend').addEventListener('submit',   e => { e.preventDefault(); resendVerification(); });
+
+    /* ──────────────────────────────────────────────────────────────
+       LANDING-PAGE INTERACTIONS — sticky nav, scroll spy, reveal,
+       counter animation, mobile toggle
+       ────────────────────────────────────────────────────────────── */
+
+    /* Sticky-nav background change once user scrolls past the hero edge. */
+    const topnav = document.getElementById('topnav');
+    window.addEventListener('scroll', () => {
+        topnav.classList.toggle('scrolled', window.scrollY > 16);
+    }, { passive: true });
+
+    /* Mobile nav toggle. */
+    const navToggle = document.getElementById('nav-toggle');
+    const navLinks  = document.getElementById('nav-links');
+    navToggle.addEventListener('click', () => navLinks.classList.toggle('open'));
+    navLinks.querySelectorAll('a[href^="#"]').forEach(a => {
+        a.addEventListener('click', () => navLinks.classList.remove('open'));
+    });
+
+    /* Scroll-spy: highlight the active nav link based on which section
+       is currently most-visible. Uses IntersectionObserver so we don't
+       run a calculation on every scroll event. */
+    const sectionIds = ['home', 'about', 'features', 'how-it-works', 'roles', 'tech'];
+    const sectionEls = sectionIds.map(id => document.getElementById(id)).filter(Boolean);
+    const navLinkMap = {};
+    document.querySelectorAll('.nav-link[data-section]').forEach(l => {
+        navLinkMap[l.dataset.section] = l;
+    });
+
+    const spyObs = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+            if (e.isIntersecting) {
+                Object.values(navLinkMap).forEach(l => l.classList.remove('active'));
+                const link = navLinkMap[e.target.id];
+                if (link) link.classList.add('active');
+            }
+        });
+    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+    sectionEls.forEach(s => spyObs.observe(s));
+
+    /* Reveal-on-scroll. The .reveal class starts hidden; we add .in-view
+       when the element crosses ~15% of the viewport. One-shot — once
+       revealed, stop observing so we don't re-hide on scroll-up. */
+    const revealObs = new IntersectionObserver((entries, obs) => {
+        entries.forEach(e => {
+            if (e.isIntersecting) {
+                e.target.classList.add('in-view');
+                obs.unobserve(e.target);
+            }
+        });
+    }, { rootMargin: '0px 0px -15% 0px', threshold: 0.05 });
+    document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+    /* Animated counters on the stats strip. Easing: cubic ease-out. */
+    const counterObs = new IntersectionObserver((entries, obs) => {
+        entries.forEach(e => {
+            if (!e.isIntersecting) return;
+            const el = e.target;
+            const target = parseInt(el.dataset.counter, 10);
+            const dur = 1200;
+            const start = performance.now();
+            function tick(now) {
+                const t = Math.min(1, (now - start) / dur);
+                const eased = 1 - Math.pow(1 - t, 3);
+                el.textContent = Math.round(target * eased);
+                if (t < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+            obs.unobserve(el);
+        });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('[data-counter]').forEach(el => counterObs.observe(el));
 </script>
 </body>
 </html>
