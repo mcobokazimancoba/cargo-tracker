@@ -12,6 +12,15 @@ import java.util.List;
 @Table(name = "cargos")
 public class Cargo {
 
+    /**
+     * Format of every cargo's public tracking number.
+     * Defined here as a compile-time constant so DTOs and resource params can
+     * reference it from {@code @Pattern(regexp = Cargo.TRACKING_NUMBER_PATTERN)}
+     * without copy-pasting the regex in five places.
+     *   "CGO-" + 10 chars from [A-Z0-9]
+     */
+    public static final String TRACKING_NUMBER_PATTERN = "CGO-[A-Z0-9]{10}";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

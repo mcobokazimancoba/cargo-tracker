@@ -1,12 +1,16 @@
 package com.cargotracker.dto.request;
 
+import com.cargotracker.entity.Location;
+
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class LocationRequest {
 
     @NotBlank
-    @Size(min = 5, max = 5, message = "UN/LOCODE must be exactly 5 characters")
+    @Pattern(regexp = Location.UNLOCODE_PATTERN,
+             message = "UN/LOCODE must be 5 uppercase chars: 2 country letters + 3 alphanumeric")
     private String unlocode;
 
     @NotBlank

@@ -27,10 +27,16 @@ import java.time.LocalDateTime;
  * which maps to the DB keyword in some dialects.
  *
  * <p>Password storage:
- * This entity stores only a BCrypt hash. The raw password never touches the
- * entity. Hashing happens in the service layer before the entity is constructed.
- * This is the correct professional pattern — entities must never hold plaintext
- * credentials even transiently.
+ * This entity stores only a salted PBKDF2-HMAC-SHA256 hash (310,000 iterations,
+ * 16-byte salt, 256-bit key) — see {@link com.cargotracker.service.AuthService}.
+ * The raw password never touches the entity; hashing happens in the service
+ * layer before the entity is constructed. Entities must never hold plaintext
+ * credentials, even transiently.
+ *
+ * <p>PBKDF2 was chosen over BCrypt because it ships with the JDK
+ * ({@code javax.crypto.SecretKeyFactory}) — no third-party dependency — and
+ * the iteration count meets the current OWASP Password Storage recommendation
+ * for PBKDF2-HMAC-SHA256.
  */
 @Entity
 @Table(
@@ -94,6 +100,19 @@ public class AppUser {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    /**
+     * Has this user clicked the verification link mailed at registration?
+     * Defaults to {@code false} so a freshly registered account is locked
+     * out of login until proven (see {@code AuthService.login}).
+     *
+     * Migration note: existing rows in production databases will inherit
+     * the column DEFAULT (FALSE) and be locked out of login. Run the
+     * one-off backfill noted in {@code db/schema.sql} to mark them
+     * verified before deploying this commit.
+     */
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -129,6 +148,7 @@ public class AppUser {
     public String getFullName()               { return fullName; }
     public Role getRole()                     { return role; }
     public boolean isActive()                 { return active; }
+    public boolean isEmailVerified()          { return emailVerified; }
     public LocalDateTime getCreatedAt()       { return createdAt; }
     public LocalDateTime getLastLoginAt()     { return lastLoginAt; }
 
@@ -137,6 +157,7 @@ public class AppUser {
     public void setFullName(String fullName)              { this.fullName = fullName; }
     public void setRole(Role role)                        { this.role = role; }
     public void setActive(boolean active)                 { this.active = active; }
+    public void setEmailVerified(boolean emailVerified)   { this.emailVerified = emailVerified; }
     public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
 
     // ── Object contract ───────────────────────────────────────────────────────

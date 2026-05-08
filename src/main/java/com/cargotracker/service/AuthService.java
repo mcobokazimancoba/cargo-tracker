@@ -3,11 +3,20 @@ package com.cargotracker.service;
 import com.cargotracker.dto.request.Requests;
 import com.cargotracker.dto.response.Responses;
 import com.cargotracker.entity.AppUser;
+import com.cargotracker.entity.EmailVerificationToken;
 import com.cargotracker.entity.PasswordResetToken;
 import com.cargotracker.exception.Exceptions;
 import com.cargotracker.repository.AppUserRepository;
+import com.cargotracker.repository.EmailVerificationTokenRepository;
 import com.cargotracker.repository.PasswordResetTokenRepository;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -15,14 +24,20 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+import javax.crypto.SecretKey;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Date;
+import java.util.logging.Logger;
 
 @ApplicationScoped
 public class AuthService {
+
+    private static final Logger LOG = Logger.getLogger(AuthService.class.getName());
 
     public static final long SESSION_SECONDS = 8L * 60 * 60;
 
@@ -31,7 +46,19 @@ public class AuthService {
     private static final int    KEY_BITS   = 256;
     private static final String ALGORITHM  = "PBKDF2WithHmacSHA256";
     private static final String HASH_SEP   = ":";
-    private static final String TOKEN_SEP  = ".";
+
+    /**
+     * HS256 requires a key of at least 256 bits = 32 bytes. JJWT will throw
+     * WeakKeyException if we feed it a shorter one, but checking ourselves at
+     * startup turns "first login fails in production" into "deploy fails fast".
+     */
+    private static final int    JWT_MIN_KEY_BYTES = 32;
+    private static final String JWT_ISSUER        = "cargo-tracker";
+    private static final String JWT_SECRET_PROP   = "jwt.secret";
+    private static final String JWT_SECRET_ENV    = "JWT_SECRET";
+
+    /** HMAC key derived from the configured secret. Resolved once at bean init. */
+    private SecretKey jwtKey;
 
     @Inject
     private AppUserRepository userRepository;
@@ -40,29 +67,92 @@ public class AuthService {
     private PasswordResetTokenRepository resetTokenRepository;
 
     @Inject
+    private EmailVerificationTokenRepository verificationTokenRepository;
+
+    @Inject
     private MailService mailService;
+
+    /**
+     * Resolves the JWT signing secret once, at bean construction.
+     *
+     * Resolution order:
+     *   1. -Djwt.secret=...   (GlassFish JVM option)
+     *   2. JWT_SECRET=...     (process environment)
+     *   3. randomly generated 32-byte key for THIS JVM (dev fallback only)
+     *
+     * Why a random dev fallback rather than a hard-coded default?
+     * A hard-coded default would ship with every clone of this repo and be
+     * the same on every developer's machine — anyone could forge a token
+     * for any deployment that forgot to set the env var. A random per-JVM
+     * key means the worst case in dev is "tokens stop working after a
+     * GlassFish restart", which is a noisy, obvious failure mode rather
+     * than a silent vulnerability. We log a stern WARNING so it cannot be
+     * missed.
+     */
+    @PostConstruct
+    void initJwtKey() {
+        String configured = System.getProperty(JWT_SECRET_PROP);
+        if (configured == null || configured.isBlank()) {
+            configured = System.getenv(JWT_SECRET_ENV);
+        }
+
+        if (configured != null && !configured.isBlank()) {
+            byte[] bytes = configured.getBytes(StandardCharsets.UTF_8);
+            if (bytes.length < JWT_MIN_KEY_BYTES) {
+                throw new IllegalStateException(
+                    "JWT secret too short: HS256 requires >= " + JWT_MIN_KEY_BYTES
+                    + " bytes (got " + bytes.length + "). "
+                    + "Set " + JWT_SECRET_ENV + " to a long random string.");
+            }
+            this.jwtKey = Keys.hmacShaKeyFor(bytes);
+            LOG.info("JWT signing key loaded from configuration.");
+        } else {
+            byte[] random = new byte[JWT_MIN_KEY_BYTES];
+            new SecureRandom().nextBytes(random);
+            this.jwtKey = Keys.hmacShaKeyFor(random);
+            LOG.warning("==========================================================");
+            LOG.warning(" JWT_SECRET is not set. Using a random per-JVM dev key.");
+            LOG.warning(" Tokens issued by this instance will be invalidated on");
+            LOG.warning(" every GlassFish restart. DO NOT run like this in prod.");
+            LOG.warning("==========================================================");
+        }
+    }
 
     @Transactional
     public Responses.User register(@NotNull @Valid Requests.Register request) {
 
-        if (userRepository.existsByUsername(request.getUsername())) {
-            throw Exceptions.duplicate("User", "username", request.getUsername());
+        // Normalise BEFORE the duplicate check.
+        // Why: the entity is persisted with a lowercased email, but if we check
+        // `existsByEmail` against the raw input then "Foo@bar.com" and
+        // "foo@bar.com" would both pass the uniqueness check and create two
+        // accounts that collide on the unique index at insert time
+        // (or worse, get inserted on different DBs that fold case differently).
+        String normalisedEmail = request.getEmail().trim().toLowerCase();
+        String normalisedUsername = request.getUsername().trim();
+
+        if (userRepository.existsByUsername(normalisedUsername)) {
+            throw Exceptions.duplicate("User", "username", normalisedUsername);
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw Exceptions.duplicate("User", "email", request.getEmail());
+        if (userRepository.existsByEmail(normalisedEmail)) {
+            throw Exceptions.duplicate("User", "email", normalisedEmail);
         }
 
         String passwordHash = hashPassword(request.getPassword());
 
         AppUser user = new AppUser(
-                request.getUsername(),
-                request.getEmail().toLowerCase(),
+                normalisedUsername,
+                normalisedEmail,
                 passwordHash,
-                request.getFullName(),
+                request.getFullName().trim(),
                 AppUser.Role.CUSTOMER
         );
 
         userRepository.save(user);
+
+        // Issue and mail a single-use verification token. Until the user
+        // clicks it, login will reject this account (see login() below).
+        issueAndSendVerificationToken(user);
+
         return Responses.User.from(user);
     }
 
@@ -77,8 +167,22 @@ public class AuthService {
             throw Exceptions.unauthorized("Account is deactivated — contact an administrator");
         }
 
+        // Password check FIRST, then the email-verified flag.
+        // Order is deliberate and matters for security: if we returned
+        // "please verify your email" before checking the password, an
+        // attacker could distinguish "account exists but unverified" from
+        // "no such account" by sending any password — turning login into
+        // an account-enumeration oracle. By verifying the password first,
+        // a wrong password gets the same generic 401 regardless of
+        // verification state. Only a caller who already knows the correct
+        // password sees the verification-needed message.
         if (!verifyPassword(request.getPassword(), user.getPasswordHash())) {
             throw Exceptions.unauthorized("Invalid credentials");
+        }
+
+        if (!user.isEmailVerified()) {
+            throw Exceptions.forbidden(
+                    "Email not verified — check your inbox for the confirmation link");
         }
 
         user.setLastLoginAt(LocalDateTime.now());
@@ -86,6 +190,73 @@ public class AuthService {
         String token = generateToken(user.getUsername());
 
         return new Responses.Auth(token, user.getUsername(), user.getRole().name(), SESSION_SECONDS);
+    }
+
+    // ── Email verification ────────────────────────────────────────────────────
+
+    /**
+     * Consume a verification token: flip the user's {@code emailVerified}
+     * flag and delete every outstanding token for that user (one-shot).
+     *
+     * Returns the (now verified) username so the resource layer can render
+     * a friendly confirmation page.
+     */
+    @Transactional
+    public String verifyEmail(@NotBlank String rawToken) {
+        EmailVerificationToken evt = verificationTokenRepository
+                .findByToken(rawToken)
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired verification link"));
+
+        // Single generic message regardless of WHY (unknown / used / expired)
+        // so an attacker can't probe to learn which tokens were issued.
+        if (evt.isUsed() || evt.isExpired()) {
+            throw Exceptions.badRequest("Invalid or expired verification link");
+        }
+
+        AppUser user = userRepository.findById(evt.getUser().getId())
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired verification link"));
+
+        user.setEmailVerified(true);
+        userRepository.update(user);
+        verificationTokenRepository.deleteAllForUser(user.getId());
+
+        LOG.info(() -> "Email verified for user id=" + user.getId());
+        return user.getUsername();
+    }
+
+    /**
+     * Re-issue a verification email if the address corresponds to an
+     * unverified account. Always succeeds silently from the caller's
+     * perspective — we never confirm whether an address is registered or
+     * its verification state.
+     */
+    @Transactional
+    public void resendVerification(@NotNull @Valid Requests.ResendVerification request) {
+        userRepository.findByEmail(request.getEmail().trim().toLowerCase())
+                .ifPresent(user -> {
+                    if (!user.isActive() || user.isEmailVerified()) {
+                        return;     // nothing to do; never reveal which case
+                    }
+                    issueAndSendVerificationToken(user);
+                });
+    }
+
+    /**
+     * Internal helper used by {@code register} and {@code resendVerification}.
+     * Deletes any prior outstanding tokens for the user before issuing a new
+     * one — there should never be more than one valid verify link in flight.
+     */
+    private void issueAndSendVerificationToken(AppUser user) {
+        verificationTokenRepository.deleteAllForUser(user.getId());
+
+        byte[] randomBytes = new byte[32];
+        new SecureRandom().nextBytes(randomBytes);
+        String rawToken = Base64.getUrlEncoder().withoutPadding()
+                                .encodeToString(randomBytes);
+
+        verificationTokenRepository.save(new EmailVerificationToken(rawToken, user));
+
+        mailService.sendVerificationEmail(user.getEmail(), user.getFullName(), rawToken);
     }
 
     // ── Forgot password ───────────────────────────────────────────────────────
@@ -121,84 +292,89 @@ public class AuthService {
     @Transactional
     public void resetPassword(@NotNull @Valid Requests.ResetPassword request) throws Exception {
 
-        System.out.println("[AuthService] resetPassword called with token: " + request.getToken());
-
+        // Note: deliberately NOT logging the raw token. A reset token is a
+        // bearer credential — anyone holding it can change the password —
+        // so it must never end up in log files. We log the user ID once we
+        // have one, since that's safe and useful for support.
         PasswordResetToken prt = resetTokenRepository
                 .findByToken(request.getToken())
-                .orElseThrow(() -> {
-                    System.out.println("[AuthService] Token NOT found in DB");
-                    return Exceptions.badRequest("Invalid or expired reset token");
-                });
-
-        System.out.println("[AuthService] Token found, expired=" + prt.isExpired() + ", used=" + prt.isUsed());
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired reset token"));
 
         if (prt.isUsed() || prt.isExpired()) {
+            // Same generic message as "token not found" — don't leak whether
+            // the failure was unknown vs. consumed vs. expired.
             throw Exceptions.badRequest("Invalid or expired reset token");
         }
 
         // Fetch user directly to ensure it is a managed entity in this transaction
         AppUser user = userRepository.findById(prt.getUser().getId())
-                .orElseThrow(() -> {
-                    System.out.println("[AuthService] User NOT found for token");
-                    return Exceptions.badRequest("User not found");
-                });
-
-        System.out.println("[AuthService] Updating password for user: " + user.getUsername());
+                .orElseThrow(() -> Exceptions.badRequest("Invalid or expired reset token"));
 
         user.setPasswordHash(hashPassword(request.getNewPassword()));
-
         userRepository.update(user);  // explicitly persist the change
-
         resetTokenRepository.deleteAllForUser(user.getId());
 
-        System.out.println("[AuthService] Password updated and token deleted successfully");
+        LOG.info(() -> "Password reset completed for user id=" + user.getId());
     }
 
     // ── Token generation ──────────────────────────────────────────────────────
 
+    /**
+     * Issues a signed JWT for a successfully authenticated user.
+     *
+     * Algorithm:    HS256 (HMAC-SHA-256, symmetric)
+     * Payload:      sub=<username>, iss=cargo-tracker, iat, exp
+     * Lifetime:     {@link #SESSION_SECONDS}
+     *
+     * The username goes in the standard `sub` claim rather than a custom one
+     * so any standard JWT inspector (jwt.io, libraries) shows it correctly.
+     * Roles are NOT embedded — we look up the live AppUser on every request
+     * in AuthFilter, so a role change takes effect on the next request without
+     * waiting for the token to expire.
+     */
     private String generateToken(String username) {
-        byte[] randomBytes = new byte[32];
-        new SecureRandom().nextBytes(randomBytes);
-
-        long issuedAt = System.currentTimeMillis() / 1000L;
-
-        String payload = username
-                + TOKEN_SEP + Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes)
-                + TOKEN_SEP + issuedAt;
-
-        return Base64.getUrlEncoder().withoutPadding()
-                     .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        long nowMillis = System.currentTimeMillis();
+        return Jwts.builder()
+                .issuer(JWT_ISSUER)
+                .subject(username)
+                .issuedAt(new Date(nowMillis))
+                .expiration(new Date(nowMillis + SESSION_SECONDS * 1000L))
+                .signWith(jwtKey, Jwts.SIG.HS256)
+                .compact();
     }
 
     // ── Token validation ──────────────────────────────────────────────────────
 
+    /**
+     * Verifies the JWT signature and returns the {@code sub} (username) claim.
+     * Throws an unauthorized exception with a non-leaky message on any failure
+     * (bad signature, malformed token, wrong issuer, expired, etc.).
+     *
+     * Why narrow the message? An attacker probing the auth endpoint should
+     * learn only "your token is bad", not which specific check rejected it.
+     * The detailed cause is logged at FINE level for debugging.
+     */
     public String validateToken(@NotBlank String token) {
         try {
-            String payload = new String(
-                    Base64.getUrlDecoder().decode(token), StandardCharsets.UTF_8);
+            Claims claims = Jwts.parser()
+                    .requireIssuer(JWT_ISSUER)
+                    .verifyWith(jwtKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
 
-            int lastDot = payload.lastIndexOf(TOKEN_SEP);
-            if (lastDot < 0) throw Exceptions.unauthorized("Malformed token");
-
-            int secondLastDot = payload.lastIndexOf(TOKEN_SEP, lastDot - 1);
-            if (secondLastDot < 0) throw Exceptions.unauthorized("Malformed token");
-
-            String username    = payload.substring(0, secondLastDot);
-            String issuedAtStr = payload.substring(lastDot + 1);
-
-            if (username.isBlank()) throw Exceptions.unauthorized("Malformed token");
-
-            long issuedAt   = Long.parseLong(issuedAtStr);
-            long nowSeconds = System.currentTimeMillis() / 1000L;
-
-            if (nowSeconds - issuedAt > SESSION_SECONDS) {
-                throw Exceptions.unauthorized("Token has expired — please log in again");
+            String username = claims.getSubject();
+            if (username == null || username.isBlank()) {
+                throw Exceptions.unauthorized("Invalid token");
             }
-
             return username;
 
-        } catch (IllegalArgumentException e) {
-            throw Exceptions.unauthorized("Invalid token format");
+        } catch (ExpiredJwtException e) {
+            // Distinct message because clients legitimately need to know to re-login.
+            throw Exceptions.unauthorized("Token has expired — please log in again");
+        } catch (JwtException | IllegalArgumentException e) {
+            LOG.fine(() -> "JWT rejected: " + e.getClass().getSimpleName() + " — " + e.getMessage());
+            throw Exceptions.unauthorized("Invalid token");
         }
     }
 

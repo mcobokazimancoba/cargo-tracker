@@ -6,6 +6,8 @@ import jakarta.mail.*;
 import jakarta.mail.internet.*;
 
 import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Sends transactional emails via SMTP.
@@ -31,6 +33,8 @@ import java.util.Properties;
  */
 @ApplicationScoped
 public class MailService {
+
+    private static final Logger LOG = Logger.getLogger(MailService.class.getName());
 
     private String smtpHost;
     private int    smtpPort;
@@ -65,6 +69,24 @@ public class MailService {
         send(toEmail,
              "Reset your Cargo Tracker password",
              buildResetEmailBody(toName, resetLink));
+    }
+
+    /**
+     * Sends an email-verification link mailed at registration.
+     *
+     * <p>The link points directly at {@code GET /api/auth/verify?token=...}
+     * so a one-click confirmation works without depending on a separate
+     * frontend page being deployed. The endpoint returns plain HTML.
+     *
+     * @param toEmail  recipient address
+     * @param toName   recipient display name used in the greeting
+     * @param rawToken URL-safe Base64 token; remains valid for 24 hours
+     */
+    public void sendVerificationEmail(String toEmail, String toName, String rawToken) {
+        String verifyLink = baseUrl + "/api/auth/verify?token=" + rawToken;
+        send(toEmail,
+             "Confirm your Cargo Tracker email",
+             buildVerificationEmailBody(toName, verifyLink));
     }
 
     /**
@@ -148,8 +170,11 @@ public class MailService {
             msg.setContent(htmlBody, "text/html; charset=utf-8");
             Transport.send(msg);
         } catch (Exception e) {
-            // Never propagate — must not reveal whether an address exists.
-            System.err.println("[MailService] Failed to send to " + toEmail + ": " + e.getMessage());
+            // Never propagate — the forgot-password flow MUST return 200 whether or
+            // not the email exists; surfacing a delivery failure to the caller would
+            // confirm the address is valid (account-enumeration leak). We log at
+            // WARNING for ops visibility but the HTTP response stays uniform.
+            LOG.log(Level.WARNING, e, () -> "Failed to send mail to " + toEmail);
         }
     }
 
@@ -160,6 +185,32 @@ public class MailService {
         String envKey = key.toUpperCase().replace('.', '_').replace('-', '_');
         value = System.getenv(envKey);
         return (value != null && !value.isBlank()) ? value : defaultValue;
+    }
+
+    private String buildVerificationEmailBody(String name, String verifyLink) {
+        return """
+            <html>
+            <body style="font-family: sans-serif; color: #333;">
+              <h2>Confirm your email</h2>
+              <p>Hi %s,</p>
+              <p>Thanks for registering with Cargo Tracker. To finish setting
+                 up your account, please confirm this email address by clicking
+                 the button below.</p>
+              <p>
+                <a href="%s"
+                   style="display:inline-block;padding:10px 20px;background:#1a73e8;
+                          color:#fff;text-decoration:none;border-radius:4px;">
+                  Confirm Email
+                </a>
+              </p>
+              <p>This link expires in <strong>24 hours</strong>.<br>
+                 If you did not create this account, you can safely ignore
+                 this email — no further action is needed.</p>
+              <hr>
+              <small>Cargo Tracker — automated message, please do not reply.</small>
+            </body>
+            </html>
+            """.formatted(name, verifyLink);
     }
 
     private String buildResetEmailBody(String name, String resetLink) {

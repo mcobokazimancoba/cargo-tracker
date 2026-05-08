@@ -60,9 +60,36 @@ public final class Responses {
         }
     }
 
+    /**
+     * Standard error body. Matches the shape produced by the JAX-RS exception
+     * mappers in {@link com.cargotracker.exception.Exceptions} so every non-2xx
+     * response — whether thrown by the service layer or built manually by a
+     * resource — looks the same to clients.
+     *
+     * History note: this class previously had a constructor that accepted three
+     * args and stored none of them, so manually built error responses (e.g. the
+     * 429 in AuthResource and the unauthorized/forbidden helpers in
+     * CargoResource) emitted empty {} bodies. Fixed here.
+     */
     public static class Error {
+        private int    status;
+        private String error;
+        private String message;
 
-        public Error(int i, String unauthorized, String message) {
+        public Error() {}                                        // for JSON-B
+
+        public Error(int status, String error, String message) {
+            this.status  = status;
+            this.error   = error;
+            this.message = message;
         }
+
+        public int    getStatus()  { return status; }
+        public String getError()   { return error; }
+        public String getMessage() { return message; }
+
+        public void setStatus(int status)        { this.status = status; }
+        public void setError(String error)       { this.error = error; }
+        public void setMessage(String message)   { this.message = message; }
     }
 }
