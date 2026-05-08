@@ -306,6 +306,7 @@
         </form>
 
         <button class="forgot-link" id="btn-show-forgot">Forgot your password?</button>
+        <button class="forgot-link" id="btn-show-resend">Didn't get the verification email?</button>
 
         <div class="guest-track">
           No account? &nbsp;
@@ -368,6 +369,22 @@
         </form>
       </div>
 
+      <!-- RESEND VERIFICATION -->
+      <div id="panel-resend" class="panel">
+        <button class="back-link" id="btn-back-from-resend">Back to sign in</button>
+        <form id="form-resend" novalidate>
+          <div class="form-group">
+            <label class="form-label" for="resend-email">Registered Email</label>
+            <input id="resend-email" class="form-control" type="email"
+                   placeholder="jane@example.com" autocomplete="email" required>
+            <div class="form-hint">// A new verification link will be sent if the address belongs to an unverified account</div>
+          </div>
+          <button type="submit" class="btn-submit" id="btn-resend">
+            Resend Verification <span class="btn-arrow">→</span>
+          </button>
+        </form>
+      </div>
+
       <div class="form-footer">
         <span>CargoTrack &copy; 2026</span>
         <div class="footer-status">
@@ -419,9 +436,10 @@
 
     /* Panel switching */
     const META = {
-        login:    { kicker: 'Secure Portal',    title: 'SIGN IN',        sub: 'Enter your credentials to continue' },
-        register: { kicker: 'New Account',      title: 'REGISTER',       sub: 'Fill in your details below' },
-        forgot:   { kicker: 'Account Recovery', title: 'RESET PASSWORD', sub: 'Enter your registered email' },
+        login:    { kicker: 'Secure Portal',     title: 'SIGN IN',              sub: 'Enter your credentials to continue' },
+        register: { kicker: 'New Account',       title: 'REGISTER',             sub: 'Fill in your details below' },
+        forgot:   { kicker: 'Account Recovery',  title: 'RESET PASSWORD',       sub: 'Enter your registered email' },
+        resend:   { kicker: 'Email Verification',title: 'RESEND VERIFICATION',  sub: 'We will send a fresh link if the account exists' },
     };
 
     function resetConfirmField() {
@@ -443,10 +461,13 @@
         document.getElementById('form-title').textContent    = m.title;
         document.getElementById('form-subtitle').textContent = m.sub;
 
-        const isForgot = name === 'forgot';
-        document.getElementById('tabs-row').style.display = isForgot ? 'none' : '';
+        // The Sign-In / Register tab strip only makes sense on those two
+        // panels. Hide it for the recovery flows (forgot / resend) so the
+        // user clearly knows they're in a different sub-task.
+        const showsTabs = name === 'login' || name === 'register';
+        document.getElementById('tabs-row').style.display = showsTabs ? '' : 'none';
 
-        if (!isForgot) {
+        if (showsTabs) {
             document.querySelectorAll('.tab').forEach(t => {
                 t.classList.toggle('active', t.dataset.tab === name);
             });
@@ -488,6 +509,10 @@
     /* Forgot / back buttons */
     document.getElementById('btn-show-forgot').addEventListener('click', () => showPanel('forgot'));
     document.getElementById('btn-back-from-forgot').addEventListener('click', () => showPanel('login'));
+
+    /* Resend-verification / back buttons */
+    document.getElementById('btn-show-resend').addEventListener('click', () => showPanel('resend'));
+    document.getElementById('btn-back-from-resend').addEventListener('click', () => showPanel('login'));
 
     /* Login */
     async function login() {
@@ -546,7 +571,14 @@
             });
             const data = await res.json();
             if (res.ok) {
-                showAlert('Account created! You can now sign in.', 'success');
+                // Account created, but step 9 blocks login until the user
+                // clicks the verification link. Be honest about that here —
+                // the previous "you can now sign in" message lied.
+                showAlert(
+                    'Account created. Check your email for a verification link, '
+                  + 'then come back here to sign in.',
+                    'success'
+                );
                 showPanel('login');
                 document.getElementById('form-register').reset();
                 document.getElementById('login-username').value = username;
@@ -582,10 +614,37 @@
         setLoading('btn-forgot', false, 'Send Reset Link', '');
     }
 
+    /* Resend verification — same enumeration-defence pattern as forgot password:
+       we always render a non-committal success message regardless of whether
+       the email exists or is already verified, so the response can't be used
+       to enumerate accounts. */
+    async function resendVerification() {
+        const email = document.getElementById('resend-email').value.trim();
+        if (!email) { showAlert('Please enter your email address.', 'error'); return; }
+
+        setLoading('btn-resend', true, 'Resend Verification', 'Sending…');
+        try {
+            await fetch(`${API_BASE}/auth/resend-verification`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            showAlert(
+                'If that address belongs to an unverified account, a new verification link has been sent.',
+                'success'
+            );
+            document.getElementById('form-resend').reset();
+        } catch {
+            showAlert('Cannot reach the server. Please try again.', 'error');
+        }
+        setLoading('btn-resend', false, 'Resend Verification', '');
+    }
+
     /* Form submission */
     document.getElementById('form-login').addEventListener('submit',    e => { e.preventDefault(); login(); });
     document.getElementById('form-register').addEventListener('submit', e => { e.preventDefault(); register(); });
     document.getElementById('form-forgot').addEventListener('submit',   e => { e.preventDefault(); forgotPassword(); });
+    document.getElementById('form-resend').addEventListener('submit',   e => { e.preventDefault(); resendVerification(); });
 </script>
 </body>
 </html>
