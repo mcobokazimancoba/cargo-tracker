@@ -1,0 +1,57 @@
+# =============================================================================
+#  Cargo Tracker — Continuous Integration
+# =============================================================================
+#  Runs on every push to any branch, and every pull request targeting main.
+#
+#  What it does:
+#    1. Check out the source
+#    2. Set up Java 17 (Temurin, the recommended OpenJDK distribution)
+#    3. Cache the local Maven repo so builds are ~3× faster after the first run
+#    4. Compile + run the 17 unit tests
+#    5. Build the WAR
+#    6. Upload the WAR as an artefact you can download from the workflow run
+#
+#  What it does NOT do:
+#    - Run integration tests against a real PostgreSQL — the unit suite
+#      mocks the repositories on purpose, so the build needs no database.
+#    - Deploy anywhere. Deployment is intentionally out of scope for a
+#      portfolio project; a recruiter clones the repo and runs it locally.
+# =============================================================================
+
+name: Build & Test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build on JDK 17
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          # Built-in cache for the local Maven repo — keyed on pom.xml hash.
+          cache: 'maven'
+
+      - name: Compile and run tests
+        run: mvn -B test
+
+      - name: Build the WAR
+        run: mvn -B -DskipTests package
+
+      - name: Upload WAR artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-tracker-war
+          path: target/cargo-tracker.war
+          retention-days: 7

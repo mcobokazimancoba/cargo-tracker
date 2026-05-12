@@ -1,5 +1,10 @@
 # Cargo Tracker
 
+[![Build & Test](https://github.com/mcobokazimancoba/cargo-tracker/actions/workflows/build.yml/badge.svg)](https://github.com/mcobokazimancoba/cargo-tracker/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java 17](https://img.shields.io/badge/Java-17-orange)](https://adoptium.net/)
+[![Jakarta EE 10](https://img.shields.io/badge/Jakarta%20EE-10-blue)](https://jakarta.ee/)
+
 A Jakarta EE 10 REST API for managing cargo shipments — booking, tracking,
 status events, and operational analytics. Built as a final-year ICT
 portfolio project; the focus is on the security work in
@@ -420,29 +425,64 @@ above.
 ## Project structure
 
 ```
-src/main/java/com/cargotracker/
-├── api/                # JAX-RS resources (HTTP layer, kept thin)
-│   ├── AuthResource.java
-│   ├── CargoResource.java
-│   ├── HealthResource.java
-│   └── LocationAnalyticsResource.java
-├── config/             # JAX-RS filters and JAX-RS Application
-│   ├── AuthFilter.java
-│   ├── CorsFilter.java
-│   ├── JakartaRestConfig.java
-│   ├── RateLimitFilter.java
-│   └── RoleFilter.java
-├── dto/
-│   ├── request/        # Inbound DTOs with @Valid annotations
-│   └── response/       # Outbound DTOs
-├── entity/             # JPA entities (AppUser, Cargo, Location, …)
-├── exception/          # Domain exceptions + JAX-RS ExceptionMappers
-├── repository/         # Thin data-access wrappers around EntityManager
-└── service/            # Business logic (where authz domain rules live)
-    ├── AuthService.java
-    ├── CargoService.java
-    ├── LoginThrottleService.java
-    └── MailService.java
+cargo-tracker/
+├── .github/workflows/
+│   └── build.yml                  # CI: compile + test + WAR upload on every push
+├── db/
+│   ├── schema.sql                 # PostgreSQL DDL + seed data (16 ports)
+│   ├── setup-datasource.sh        # GlassFish JDBC pool bootstrap (bash)
+│   └── setup-datasource.ps1       # GlassFish JDBC pool bootstrap (PowerShell)
+├── src/
+│   ├── main/
+│   │   ├── java/com/cargotracker/
+│   │   │   ├── api/               # JAX-RS resources (HTTP layer, kept thin)
+│   │   │   │   ├── AuthResource.java
+│   │   │   │   ├── CargoResource.java
+│   │   │   │   ├── HealthResource.java
+│   │   │   │   └── LocationAnalyticsResource.java
+│   │   │   ├── config/            # JAX-RS filters and the JAX-RS Application
+│   │   │   │   ├── AuthFilter.java
+│   │   │   │   ├── CorsFilter.java
+│   │   │   │   ├── JakartaRestConfig.java
+│   │   │   │   ├── RateLimitFilter.java
+│   │   │   │   └── RoleFilter.java
+│   │   │   ├── dto/
+│   │   │   │   ├── request/       # Inbound DTOs with @Valid annotations
+│   │   │   │   └── response/      # Outbound DTOs
+│   │   │   ├── entity/            # JPA entities
+│   │   │   │   ├── AppUser.java
+│   │   │   │   ├── Cargo.java
+│   │   │   │   ├── EmailVerificationToken.java
+│   │   │   │   ├── Location.java
+│   │   │   │   ├── PasswordResetToken.java
+│   │   │   │   └── TrackingEvent.java
+│   │   │   ├── exception/         # Domain exceptions + JAX-RS ExceptionMappers
+│   │   │   ├── repository/        # Thin EntityManager wrappers
+│   │   │   └── service/           # Business logic (incl. domain-level authz)
+│   │   │       ├── AnalyticsService.java
+│   │   │       ├── AuthService.java
+│   │   │       ├── CargoService.java
+│   │   │       ├── LocationService.java
+│   │   │       ├── LoginThrottleService.java
+│   │   │       └── MailService.java
+│   │   ├── resources/META-INF/
+│   │   │   └── persistence.xml    # JPA unit, JNDI ref to jdbc/cargoTrackerDS
+│   │   └── webapp/
+│   │       ├── WEB-INF/           # web.xml, beans.xml, glassfish-web.xml
+│   │       ├── css/               # Shared stylesheet
+│   │       ├── js/api.js          # Frontend API client + auth helpers
+│   │       ├── pages/             # dashboard, book, track, search, …
+│   │       └── index.html         # Landing page + sign-in / register
+│   └── test/java/com/cargotracker/service/
+│       ├── AuthServiceTest.java                  # 7 tests
+│       ├── CargoServiceAuthorizationTest.java    # 5 tests
+│       └── LoginThrottleServiceTest.java         # 5 tests
+├── .env.example                   # All env vars / JVM options documented
+├── .gitignore
+├── LICENSE                        # MIT
+├── README.md                      # You are here
+├── nb-configuration.xml           # NetBeans project config
+└── pom.xml                        # Maven build, dependencies, plugins
 ```
 
 ---
