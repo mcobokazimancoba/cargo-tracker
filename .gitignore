@@ -25,3 +25,7 @@ Thumbs.db
 .env
 .env.local
 *.local.properties
+
+# --- Tool harness scratch state --------------------------------------------
+# Per-machine state for the assistant tooling — never belongs in source control.
+.claude/
