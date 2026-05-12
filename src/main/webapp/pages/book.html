@@ -6,71 +6,187 @@
     <title>Book Shipment — Cargo Tracker</title>
     <link rel="stylesheet" href="../css/style.css">
     <style>
-        /* ── Searchable location combobox ────────────────────────────────── */
-        .combobox { position: relative; }
-        .combobox-input { width: 100%; cursor: text; }
-        .combobox-input.has-selection {
-            background: rgba(245,158,11,0.06);
-            border-color: rgba(245,158,11,0.3);
-        }
-        .combobox-clear {
-            position: absolute; top: 50%; right: 12px; transform: translateY(-50%);
-            background: none; border: none; cursor: pointer;
-            color: var(--text-muted); font-size: 1rem; padding: 4px 8px;
-            display: none; transition: color 0.15s;
-        }
-        .combobox-clear:hover { color: var(--red); }
-        .combobox-input.has-selection ~ .combobox-clear { display: block; }
+        /* ── Port-picker (select with internal search) ─────────────────── */
 
-        .combobox-list {
-            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-            background: var(--bg-raised);
-            border: 1px solid var(--border-strong);
-            border-radius: var(--radius-sm);
-            max-height: 280px; overflow-y: auto;
-            z-index: 100; display: none;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-        }
-        .combobox-list.open { display: block; }
-        .combobox-option {
-            padding: 10px 14px; cursor: pointer;
-            border-bottom: 1px solid var(--border);
+        .port-picker { position: relative; }
+
+        /* Looks like a normal form control but is a button to clearly
+           signal "click me to open a list". The chevron tells the user
+           this is a dropdown, not a free-text field. */
+        .picker-trigger {
+            width: 100%;
             display: flex; align-items: center; justify-content: space-between;
             gap: 12px;
-            transition: background 0.12s;
+            padding: 11px 14px;
+            background: var(--bg-input, var(--bg-raised));
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: inherit; font-size: 0.9rem;
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
         }
-        .combobox-option:last-child { border-bottom: none; }
-        .combobox-option:hover, .combobox-option.highlighted {
-            background: rgba(245,158,11,0.08);
+        .picker-trigger:hover  { border-color: var(--amber); }
+        .picker-trigger:focus,
+        .picker-trigger.open   { outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+        .picker-trigger.has-selection {
+            border-color: rgba(34,197,94,0.4);
+            background: rgba(34,197,94,0.04);
         }
-        .combobox-option-main {
-            font-size: 0.88rem; color: var(--text-primary);
-            display: flex; flex-direction: column;
+
+        .trigger-content { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+        .trigger-city {
+            font-size: 0.95rem; color: var(--text-primary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .combobox-option-city { font-weight: 500; }
-        .combobox-option-country {
-            font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;
+        .trigger-country {
+            font-size: 0.7rem; color: var(--text-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .combobox-option-code {
+        .trigger-placeholder { color: var(--text-muted); font-size: 0.9rem; font-style: italic; }
+        .trigger-code {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem; color: var(--amber);
-            letter-spacing: 0.08em;
+            font-size: 0.65rem; letter-spacing: 0.08em;
+            color: var(--amber);
             padding: 3px 8px;
             background: rgba(245,158,11,0.1);
             border: 1px solid rgba(245,158,11,0.25);
             border-radius: 3px;
+        }
+        .trigger-chevron {
+            width: 18px; height: 18px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted);
+            transition: transform 0.2s, color 0.15s;
             flex-shrink: 0;
         }
-        .combobox-empty {
-            padding: 18px 14px; text-align: center;
-            font-size: 0.78rem; color: var(--text-muted);
+        .picker-trigger.open .trigger-chevron { transform: rotate(180deg); color: var(--amber); }
+        .picker-trigger:hover .trigger-chevron { color: var(--amber); }
+
+        /* ── Popup ───────────────────────────────────────────────────── */
+        .picker-popup {
+            position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: var(--bg-raised);
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-md);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+            overflow: hidden;
+            z-index: 100;
+            display: none;
+        }
+        .picker-popup.open {
+            display: block;
+            animation: popup-in 0.18s ease-out;
+        }
+        @keyframes popup-in {
+            from { opacity: 0; transform: translateY(-6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Search bar — sticky at the top of the popup so it stays visible
+           while the user scrolls a long port list. */
+        .picker-search-wrap {
+            position: sticky; top: 0;
+            padding: 12px;
+            background: var(--bg-raised);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .picker-search-icon {
+            color: var(--text-muted); font-size: 0.95rem; flex-shrink: 0;
+        }
+        .picker-search {
+            flex: 1;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            font-size: 0.85rem; outline: none;
+            transition: border-color 0.15s;
+        }
+        .picker-search:focus { border-color: var(--amber); }
+        .picker-search::placeholder { color: var(--text-muted); font-style: italic; }
+        .picker-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem; letter-spacing: 0.08em;
+            color: var(--text-muted); flex-shrink: 0;
+        }
+
+        /* Region group headers inside the list */
+        .picker-list { max-height: 360px; overflow-y: auto; }
+        .picker-group-label {
+            position: sticky; top: 0;
+            background: var(--bg-surface);
+            color: var(--text-muted);
+            padding: 7px 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem; letter-spacing: 0.16em;
+            text-transform: uppercase;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .picker-group-label:first-child { border-top: none; }
+
+        .picker-option {
+            padding: 10px 14px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.12s;
+        }
+        .picker-option:last-child { border-bottom: none; }
+        .picker-option:hover, .picker-option.highlighted {
+            background: rgba(245,158,11,0.08);
+        }
+        .picker-option.selected {
+            background: rgba(34,197,94,0.06);
+            border-left: 3px solid #22c55e;
+            padding-left: 11px;
+        }
+        .option-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .option-city {
+            font-size: 0.9rem; color: var(--text-primary); font-weight: 500;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .option-country {
+            font-size: 0.7rem; color: var(--text-muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .option-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; letter-spacing: 0.08em;
+            color: var(--amber);
+            padding: 3px 8px;
+            background: rgba(245,158,11,0.08);
+            border: 1px solid rgba(245,158,11,0.18);
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .picker-empty {
+            padding: 24px 16px; text-align: center;
+            color: var(--text-muted); font-size: 0.82rem;
             font-style: italic;
         }
 
-        /* highlight matched substring inside the city name */
-        .match { color: var(--amber); font-weight: 600; }
+        /* highlighted matched substring */
+        .match { color: var(--amber); font-weight: 700; }
 
-        /* ── Route preview ──────────────────────────────────────────────── */
+        /* clear button — appears once a port is selected */
+        .picker-clear {
+            position: absolute; top: 50%; right: 38px; transform: translateY(-50%);
+            background: transparent; border: none; cursor: pointer;
+            color: var(--text-muted); font-size: 1rem;
+            display: none; padding: 4px 8px;
+            border-radius: 3px; transition: background 0.15s, color 0.15s;
+            z-index: 2;
+        }
+        .picker-trigger.has-selection ~ .picker-clear { display: block; }
+        .picker-clear:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+
+        /* ── Route Preview ─────────────────────────────────────────────── */
         .route-preview {
             background: var(--bg-raised);
             border: 1px solid rgba(245,158,11,0.25);
@@ -97,12 +213,8 @@
         }
         .route-port { display: flex; flex-direction: column; gap: 4px; }
         .route-port.dest { text-align: right; }
-        .route-port-city {
-            font-size: 1.05rem; font-weight: 600; color: var(--text-primary);
-        }
-        .route-port-country {
-            font-size: 0.78rem; color: var(--text-secondary);
-        }
+        .route-port-city  { font-size: 1.05rem; font-weight: 600; color: var(--text-primary); }
+        .route-port-country { font-size: 0.78rem; color: var(--text-secondary); }
         .route-port-code {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.65rem; letter-spacing: 0.1em;
@@ -114,21 +226,19 @@
         }
         .route-arrow-big::before {
             content: ''; position: absolute; top: 50%; left: -8px; right: -8px;
-            height: 1px; background: linear-gradient(90deg, transparent, var(--amber), transparent);
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--amber), transparent);
             transform: translateY(-50%);
         }
 
-        /* slimmer hint about selecting from real ports */
         .field-help {
             font-size: 0.7rem; color: var(--text-muted);
             margin-top: 5px; letter-spacing: 0.04em;
         }
         .field-help.error { color: var(--red); }
 
-        /* form layout tweaks */
-        .booking-row {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-        }
+        .booking-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
         @media (max-width: 720px) {
             .booking-row { grid-template-columns: 1fr; }
             .route-line { grid-template-columns: 1fr; gap: 8px; }
@@ -166,30 +276,50 @@
             <div class="booking-row">
                 <!-- ORIGIN -->
                 <div class="form-group">
-                    <label class="form-label" for="origin-input">Origin Port</label>
-                    <div class="combobox" id="origin-combo">
-                        <input id="origin-input" class="form-control combobox-input"
-                               type="text" placeholder="Type a city or country…"
-                               autocomplete="off" required>
-                        <button type="button" class="combobox-clear" data-target="origin" aria-label="Clear origin">×</button>
-                        <div class="combobox-list" id="origin-list" role="listbox"></div>
+                    <label class="form-label">Origin Port</label>
+                    <div class="port-picker" id="origin-picker">
+                        <button type="button" class="picker-trigger" id="origin-trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="trigger-content" id="origin-trigger-content">
+                                <span class="trigger-placeholder">Choose a port…</span>
+                            </span>
+                            <span class="trigger-chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <button type="button" class="picker-clear" id="origin-clear" aria-label="Clear origin">×</button>
+                        <div class="picker-popup" id="origin-popup" role="listbox">
+                            <div class="picker-search-wrap">
+                                <span class="picker-search-icon">🔍</span>
+                                <input type="text" class="picker-search" id="origin-search" placeholder="Search by city, country, or code…">
+                                <span class="picker-count" id="origin-count">16</span>
+                            </div>
+                            <div class="picker-list" id="origin-list"></div>
+                        </div>
                     </div>
                     <input type="hidden" id="origin-code">
-                    <div class="field-help" id="origin-help">Search by city, country, or UN/LOCODE.</div>
+                    <div class="field-help" id="origin-help">Click to browse the list of available ports.</div>
                 </div>
 
                 <!-- DESTINATION -->
                 <div class="form-group">
-                    <label class="form-label" for="destination-input">Destination Port</label>
-                    <div class="combobox" id="destination-combo">
-                        <input id="destination-input" class="form-control combobox-input"
-                               type="text" placeholder="Type a city or country…"
-                               autocomplete="off" required>
-                        <button type="button" class="combobox-clear" data-target="destination" aria-label="Clear destination">×</button>
-                        <div class="combobox-list" id="destination-list" role="listbox"></div>
+                    <label class="form-label">Destination Port</label>
+                    <div class="port-picker" id="destination-picker">
+                        <button type="button" class="picker-trigger" id="destination-trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="trigger-content" id="destination-trigger-content">
+                                <span class="trigger-placeholder">Choose a port…</span>
+                            </span>
+                            <span class="trigger-chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <button type="button" class="picker-clear" id="destination-clear" aria-label="Clear destination">×</button>
+                        <div class="picker-popup" id="destination-popup" role="listbox">
+                            <div class="picker-search-wrap">
+                                <span class="picker-search-icon">🔍</span>
+                                <input type="text" class="picker-search" id="destination-search" placeholder="Search by city, country, or code…">
+                                <span class="picker-count" id="destination-count">16</span>
+                            </div>
+                            <div class="picker-list" id="destination-list"></div>
+                        </div>
                     </div>
                     <input type="hidden" id="destination-code">
-                    <div class="field-help" id="destination-help">Search by city, country, or UN/LOCODE.</div>
+                    <div class="field-help" id="destination-help">Click to browse the list of available ports.</div>
                 </div>
             </div>
 
@@ -212,14 +342,11 @@
             </div>
 
             <div class="booking-row">
-                <!-- DESCRIPTION -->
                 <div class="form-group">
                     <label class="form-label" for="description">Description</label>
                     <input id="description" class="form-control"
                            placeholder="e.g. Electronic components" required>
                 </div>
-
-                <!-- WEIGHT -->
                 <div class="form-group">
                     <label class="form-label" for="weight">Weight (kg)</label>
                     <input id="weight" type="number" step="0.1" min="0.1" class="form-control"
@@ -227,7 +354,6 @@
                 </div>
             </div>
 
-            <!-- ETA -->
             <div class="form-group">
                 <label class="form-label" for="eta">Expected Arrival</label>
                 <input id="eta" type="date" class="form-control">
@@ -247,154 +373,189 @@
     initNav('book');
 
     /* ──────────────────────────────────────────────────────────────
-       Searchable location combobox
-       Backed by GET /api/locations — we cache the full list in
-       memory the first time and filter client-side. With ~16 rows
-       there's no point round-tripping to PostgreSQL on every keystroke.
+       Port picker — "select with search" component.
+
+       Pattern: clicking the trigger opens a popup that contains its own
+       search input plus the list of all ports. Filtering happens
+       client-side because /api/locations returns ~16 rows that all fit
+       in memory comfortably.
+
+       Why a separate trigger button rather than the previous combobox:
+       a button with a chevron is universally recognised as "opens a
+       list", whereas the previous styling looked like a free-text
+       field. Visual clarity beats elegance for first-time users.
        ────────────────────────────────────────────────────────────── */
 
-    let LOCATIONS = [];                                   // populated on load
-    const SELECTED = { origin: null, destination: null }; // { unlocode, city, country }
+    let LOCATIONS = [];                                 // populated on load
+    const SELECTED = { origin: null, destination: null };
 
-    /** Pull the list once on page load, plus a tiny shimmer if it lags. */
+    /** Map UN/LOCODE country prefix → user-facing region label. Used to
+     *  group the dropdown so users can browse by continent at a glance. */
+    const REGION_BY_CC = {
+        ZA: 'Africa',
+        US: 'Americas', CA: 'Americas', BR: 'Americas',
+        NL: 'Europe', DE: 'Europe', GB: 'Europe', ES: 'Europe', FR: 'Europe', IT: 'Europe',
+        CN: 'Asia', HK: 'Asia', SG: 'Asia', JP: 'Asia', KR: 'Asia', IN: 'Asia',
+        AE: 'Middle East', SA: 'Middle East',
+        AU: 'Oceania', NZ: 'Oceania'
+    };
+    const REGION_ORDER = ['Africa', 'Americas', 'Europe', 'Middle East', 'Asia', 'Oceania', 'Other'];
+
+    function regionOf(loc) {
+        const cc = (loc.unlocode || '').slice(0, 2).toUpperCase();
+        return REGION_BY_CC[cc] || 'Other';
+    }
+
     async function loadLocations() {
         try {
             LOCATIONS = await LocationApi.list();
-            // Sort alphabetically by city for a predictable dropdown order.
             LOCATIONS.sort((a, b) => a.city.localeCompare(b.city));
         } catch (err) {
             console.error('Failed to load locations:', err);
             showAlert('alert-box',
-                'Could not load the port catalogue. Refresh the page or contact an admin.', 'error');
+                'Could not load the port catalogue. Refresh or contact an admin.', 'error');
         }
     }
 
-    /** Build a single dropdown <div> for one location, with optional substring highlighting. */
-    function renderOption(loc, query) {
-        const opt = document.createElement('div');
-        opt.className = 'combobox-option';
-        opt.dataset.unlocode = loc.unlocode;
-        opt.setAttribute('role', 'option');
+    /* ── Per-picker state and wiring ─────────────────────────────────── */
 
-        const city    = highlight(loc.city, query);
-        const country = highlight(loc.country, query);
-        const code    = highlight(loc.unlocode, query);
-
-        opt.innerHTML = `
-            <div class="combobox-option-main">
-                <span class="combobox-option-city">${city}</span>
-                <span class="combobox-option-country">${country}</span>
-            </div>
-            <span class="combobox-option-code">${code}</span>
-        `;
-        return opt;
-    }
-
-    /** Highlight every case-insensitive occurrence of `query` inside `text`. */
-    function highlight(text, query) {
-        if (!query) return escapeHtml(text);
-        const safe   = escapeHtml(text);
-        const needle = escapeRegex(query);
-        return safe.replace(new RegExp(`(${needle})`, 'ig'), '<span class="match">$1</span>');
-    }
-    function escapeHtml(s)  { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-    function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
-    /** Filter the cached list by user's free-text query (city OR country OR code substring). */
-    function filterLocations(query) {
-        if (!query) return LOCATIONS.slice(0, 20);
-        const q = query.toLowerCase();
-        return LOCATIONS.filter(loc =>
-            loc.city.toLowerCase().includes(q)    ||
-            loc.country.toLowerCase().includes(q) ||
-            loc.unlocode.toLowerCase().includes(q)
-        );
-    }
-
-    /** Wire up one combobox (origin or destination). All state lives in SELECTED[field]. */
-    function setupCombobox(field) {
-        const input = document.getElementById(`${field}-input`);
-        const list  = document.getElementById(`${field}-list`);
-        const codeHidden = document.getElementById(`${field}-code`);
-        const help  = document.getElementById(`${field}-help`);
+    function setupPicker(field) {
+        const trigger      = document.getElementById(`${field}-trigger`);
+        const triggerInner = document.getElementById(`${field}-trigger-content`);
+        const popup        = document.getElementById(`${field}-popup`);
+        const search       = document.getElementById(`${field}-search`);
+        const list         = document.getElementById(`${field}-list`);
+        const countEl      = document.getElementById(`${field}-count`);
+        const codeHidden   = document.getElementById(`${field}-code`);
+        const help         = document.getElementById(`${field}-help`);
+        const clearBtn     = document.getElementById(`${field}-clear`);
 
         let highlightedIdx = -1;
 
-        function rebuild(query) {
-            const matches = filterLocations(query);
+        function renderList(query) {
+            const q = (query || '').trim().toLowerCase();
+            const matches = q
+                ? LOCATIONS.filter(l =>
+                    l.city.toLowerCase().includes(q)    ||
+                    l.country.toLowerCase().includes(q) ||
+                    l.unlocode.toLowerCase().includes(q))
+                : LOCATIONS.slice();
+
+            countEl.textContent = matches.length;
             list.innerHTML = '';
             highlightedIdx = -1;
 
             if (!matches.length) {
                 const empty = document.createElement('div');
-                empty.className = 'combobox-empty';
+                empty.className = 'picker-empty';
                 empty.textContent = `No ports match "${query}".`;
                 list.appendChild(empty);
                 return;
             }
-            matches.forEach((loc, idx) => {
-                const opt = renderOption(loc, query);
-                opt.addEventListener('mousedown', e => {       // mousedown not click — fires before input.blur
-                    e.preventDefault();
-                    select(loc);
+
+            // Group by region — but flatten back out when the user is
+            // searching, since group headers add visual noise to a short
+            // filtered list.
+            if (!q) {
+                const byRegion = {};
+                matches.forEach(loc => {
+                    const r = regionOf(loc);
+                    (byRegion[r] = byRegion[r] || []).push(loc);
                 });
-                opt.addEventListener('mouseenter', () => {
-                    list.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
-                    opt.classList.add('highlighted');
-                    highlightedIdx = idx;
+                REGION_ORDER.forEach(region => {
+                    const ports = byRegion[region];
+                    if (!ports || !ports.length) return;
+                    const header = document.createElement('div');
+                    header.className = 'picker-group-label';
+                    header.textContent = `// ${region}`;
+                    list.appendChild(header);
+                    ports.forEach(loc => list.appendChild(buildOption(loc, q)));
                 });
-                list.appendChild(opt);
+            } else {
+                matches.forEach(loc => list.appendChild(buildOption(loc, q)));
+            }
+        }
+
+        function buildOption(loc, query) {
+            const opt = document.createElement('div');
+            opt.className = 'picker-option';
+            opt.dataset.unlocode = loc.unlocode;
+            opt.setAttribute('role', 'option');
+            if (SELECTED[field]?.unlocode === loc.unlocode) opt.classList.add('selected');
+
+            opt.innerHTML = `
+                <div class="option-main">
+                    <span class="option-city">${highlight(loc.city, query)}</span>
+                    <span class="option-country">${highlight(loc.country, query)}</span>
+                </div>
+                <span class="option-code">${highlight(loc.unlocode, query)}</span>
+            `;
+            opt.addEventListener('mousedown', e => { e.preventDefault(); select(loc); });
+            opt.addEventListener('mouseenter', () => {
+                list.querySelectorAll('.highlighted').forEach(el => el.classList.remove('highlighted'));
+                opt.classList.add('highlighted');
             });
+            return opt;
         }
 
         function open() {
-            rebuild(input.value.trim());
-            list.classList.add('open');
+            renderList(search.value);
+            popup.classList.add('open');
+            trigger.classList.add('open');
+            trigger.setAttribute('aria-expanded', 'true');
+            // Focus the search input after the popup paints — feels snappier.
+            setTimeout(() => search.focus(), 30);
         }
-        function close() { list.classList.remove('open'); }
+        function close() {
+            popup.classList.remove('open');
+            trigger.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+        }
+        function toggle() { popup.classList.contains('open') ? close() : open(); }
 
         function select(loc) {
             SELECTED[field] = loc;
-            input.value = `${loc.city}, ${loc.country}`;
-            input.classList.add('has-selection');
+            triggerInner.innerHTML = `
+                <span class="trigger-city">${escapeHtml(loc.city)}</span>
+                <span class="trigger-country">${escapeHtml(loc.country)}</span>
+            `;
+            trigger.classList.add('has-selection');
             codeHidden.value = loc.unlocode;
             help.textContent = `Selected: ${loc.unlocode}`;
             help.classList.remove('error');
             close();
+            search.value = '';
             updateRoutePreview();
             validateNotSameAsOther(field);
         }
 
         function clear() {
             SELECTED[field] = null;
-            input.value = '';
-            input.classList.remove('has-selection');
+            triggerInner.innerHTML = `<span class="trigger-placeholder">Choose a port…</span>`;
+            trigger.classList.remove('has-selection');
             codeHidden.value = '';
-            help.textContent = 'Search by city, country, or UN/LOCODE.';
+            help.textContent = 'Click to browse the list of available ports.';
             help.classList.remove('error');
             updateRoutePreview();
-            input.focus();
+            search.value = '';
+            trigger.focus();
         }
 
-        // Input events
-        input.addEventListener('focus', open);
-        input.addEventListener('input', () => {
-            // Typing invalidates any prior selection
-            SELECTED[field] = null;
-            codeHidden.value = '';
-            input.classList.remove('has-selection');
-            help.textContent = 'Search by city, country, or UN/LOCODE.';
-            help.classList.remove('error');
-            rebuild(input.value.trim());
-            list.classList.add('open');
-            updateRoutePreview();
+        // Trigger button
+        trigger.addEventListener('click', toggle);
+        trigger.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+                e.preventDefault(); open();
+            }
         });
-        input.addEventListener('blur', () => setTimeout(close, 100));    // delay so click can land
 
-        // Keyboard navigation
-        input.addEventListener('keydown', e => {
-            const opts = [...list.querySelectorAll('.combobox-option')];
-            if (!opts.length) return;
+        // Clear button
+        clearBtn.addEventListener('click', e => { e.stopPropagation(); clear(); });
+
+        // Search-as-you-type inside the popup
+        search.addEventListener('input', () => renderList(search.value));
+        search.addEventListener('keydown', e => {
+            const opts = [...list.querySelectorAll('.picker-option')];
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 highlightedIdx = Math.min(opts.length - 1, highlightedIdx + 1);
@@ -410,8 +571,7 @@
                 }
                 return;
             } else if (e.key === 'Escape') {
-                close();
-                return;
+                e.preventDefault(); close(); trigger.focus(); return;
             } else {
                 return;
             }
@@ -420,12 +580,27 @@
             opts[highlightedIdx]?.scrollIntoView({ block: 'nearest' });
         });
 
-        // Clear button
-        document.querySelector(`.combobox-clear[data-target="${field}"]`)
-                .addEventListener('click', clear);
+        // Click-outside-to-close. Each picker checks its OWN container so
+        // they don't fight each other.
+        document.addEventListener('mousedown', e => {
+            if (popup.classList.contains('open')
+                && !popup.contains(e.target)
+                && !trigger.contains(e.target)
+                && !clearBtn.contains(e.target)) {
+                close();
+            }
+        });
     }
 
-    /** Reject same-as-other selection inline, BEFORE submission, to spare the user a server round-trip. */
+    function highlight(text, query) {
+        if (!query) return escapeHtml(text);
+        const safe   = escapeHtml(text);
+        const needle = escapeRegex(query);
+        return safe.replace(new RegExp(`(${needle})`, 'ig'), '<span class="match">$1</span>');
+    }
+    function escapeHtml(s)  { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
     function validateNotSameAsOther(justChanged) {
         const o = SELECTED.origin?.unlocode;
         const d = SELECTED.destination?.unlocode;
@@ -440,7 +615,6 @@
         const preview = document.getElementById('route-preview');
         const o = SELECTED.origin;
         const d = SELECTED.destination;
-
         if (o && d) {
             document.getElementById('preview-origin-city').textContent    = o.city;
             document.getElementById('preview-origin-country').textContent = o.country;
@@ -454,12 +628,12 @@
         }
     }
 
-    /* ── Bootstrap on page load ───────────────────────────────────────── */
+    /* ── Bootstrap ──────────────────────────────────────────────────── */
     await loadLocations();
-    setupCombobox('origin');
-    setupCombobox('destination');
+    setupPicker('origin');
+    setupPicker('destination');
 
-    /* ── Default the ETA picker to "tomorrow" — friendlier than blank ──── */
+    /* Default the ETA picker to "tomorrow" — friendlier than blank. */
     const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
     document.getElementById('eta').value = tomorrow.toISOString().slice(0, 10);
     document.getElementById('eta').min   = tomorrow.toISOString().slice(0, 10);
@@ -500,18 +674,18 @@
                 'success'
             );
 
-            // Reset everything for a possible second booking
             document.getElementById('booking-form').reset();
             ['origin', 'destination'].forEach(f => {
                 SELECTED[f] = null;
-                document.getElementById(`${f}-input`).value = '';
-                document.getElementById(`${f}-input`).classList.remove('has-selection');
+                document.getElementById(`${f}-trigger-content`).innerHTML =
+                    `<span class="trigger-placeholder">Choose a port…</span>`;
+                document.getElementById(`${f}-trigger`).classList.remove('has-selection');
                 document.getElementById(`${f}-code`).value = '';
-                document.getElementById(`${f}-help`).textContent = 'Search by city, country, or UN/LOCODE.';
+                document.getElementById(`${f}-help`).textContent =
+                    'Click to browse the list of available ports.';
                 document.getElementById(`${f}-help`).classList.remove('error');
             });
             updateRoutePreview();
-            // Restore the friendly default ETA again after reset() blanked it
             document.getElementById('eta').value = tomorrow.toISOString().slice(0, 10);
         } catch (err) {
             showAlert('alert-box', err.message || 'Booking failed. Please try again.', 'error');
